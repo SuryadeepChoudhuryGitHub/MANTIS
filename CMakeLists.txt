@@ -3,9 +3,9 @@ cmake_minimum_required(VERSION 3.20)
 # Ensure CMake 4.x compatibility with third-party subprojects (e.g. Bullet3)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "Minimum CMake policy version for subprojects" FORCE)
 
-project(TorqueLabNative
+project(ProjectARES
     VERSION 1.0.0
-    DESCRIPTION "Torque Lab Native — 6-DOF Vehicle Physics Simulator (C++20 / OpenGL 3.3 / Bullet / Dear ImGui)"
+    DESCRIPTION "Project ARES — Autonomous Rover Exploration Simulator (C++20 / OpenGL 3.3 / Bullet / Dear ImGui)"
     LANGUAGES C CXX
 )
 
@@ -18,7 +18,7 @@ if(MSVC)
     add_compile_options(/W3 /FS /utf-8 /EHsc)
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS NOMINMAX WIN32_LEAN_AND_MEAN)
 else()
-    add_compile_options(-Wall -Wextra -Wpedantic -Wno-unused-parameter)
+    add_compile_options(-Wall -Wextra -Wpedantic -Wno-unused-parameter -g)
 endif()
 
 include(FetchContent)
@@ -159,9 +159,9 @@ target_link_libraries(TorqueLabPhysics PUBLIC
 )
 
 # -----------------------------------------------------------------------------
-# 6. Native Desktop Application Target (TorqueLabNative)
+# 6. Native Desktop Application Target (ProjectARES)
 # -----------------------------------------------------------------------------
-add_executable(TorqueLabNative
+add_executable(ProjectARES
     src/app/main.cpp
     src/app/Application.cpp
     src/terrain/TerrainManager.cpp
@@ -179,7 +179,7 @@ add_executable(TorqueLabNative
     src/ui/ImGuiDashboard.cpp
 )
 
-target_include_directories(TorqueLabNative PRIVATE
+target_include_directories(ProjectARES PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
@@ -202,7 +202,7 @@ target_link_libraries(TorqueLabTestsLib PUBLIC
     glfw
 )
 
-target_link_libraries(TorqueLabNative PRIVATE
+target_link_libraries(ProjectARES PRIVATE
     TorqueLabPhysics
     TorqueLabTestsLib
     glad
@@ -212,53 +212,55 @@ target_link_libraries(TorqueLabNative PRIVATE
 )
 
 # Copy GLSL shaders and vehicle 3D models next to executable after build for portable execution
-add_custom_command(TARGET TorqueLabNative POST_BUILD
+add_custom_command(TARGET ProjectARES POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/shaders"
-        "$<TARGET_FILE_DIR:TorqueLabNative>/shaders"
+        "$<TARGET_FILE_DIR:ProjectARES>/shaders"
     COMMENT "Copying GLSL shaders to output directory"
 )
 
-add_custom_command(TARGET TorqueLabNative POST_BUILD
+add_custom_command(TARGET ProjectARES POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/model"
-        "$<TARGET_FILE_DIR:TorqueLabNative>/model"
+        "$<TARGET_FILE_DIR:ProjectARES>/model"
     COMMENT "Copying vehicle 3D models to output directory"
 )
 
-# Auto-bake vehicle collision geometry for any new or modified 3D models at build time (optional)
-option(AUTO_BAKE_COLLISIONS "Auto-bake vehicle collision geometry on build" OFF)
-if(AUTO_BAKE_COLLISIONS)
-    add_custom_command(TARGET TorqueLabNative POST_BUILD
-        COMMAND "$<TARGET_FILE:TorqueLabNative>" --bake-collisions
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        COMMENT "Auto-baking vehicle collision hulls for new or modified 3D models"
-    )
-endif()
-
-add_custom_command(TARGET TorqueLabNative POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_CURRENT_SOURCE_DIR}/model/cache"
-        "$<TARGET_FILE_DIR:TorqueLabNative>/model/cache"
-    COMMENT "Syncing baked collision cache to output directory"
+# Create compatibility binary so both ProjectARES.exe and TorqueLabNative.exe work
+add_custom_command(TARGET ProjectARES POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:ProjectARES>"
+        "$<TARGET_FILE_DIR:ProjectARES>/TorqueLabNative$<TARGET_FILE_SUFFIX:ProjectARES>"
+    COMMENT "Creating TorqueLabNative compatibility binary"
 )
 
+add_custom_target(TorqueLabNative DEPENDS ProjectARES)
+
 # -----------------------------------------------------------------------------
-# 7. Automated Comparative Physics & Validation Test Runner (TorqueLabNativeTests)
+# 7. Automated Comparative Physics & Validation Test Runner (ProjectARESTests)
 # -----------------------------------------------------------------------------
 enable_testing()
 
-add_executable(TorqueLabNativeTests
+add_executable(ProjectARESTests
     tests/test_main.cpp
 )
 
-target_include_directories(TorqueLabNativeTests PRIVATE
+target_include_directories(ProjectARESTests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/tests
 )
 
-target_link_libraries(TorqueLabNativeTests PRIVATE
+target_link_libraries(ProjectARESTests PRIVATE
     TorqueLabTestsLib
 )
 
-add_test(NAME TorqueLabNativeValidationSuite COMMAND TorqueLabNativeTests)
+add_custom_command(TARGET ProjectARESTests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:ProjectARESTests>"
+        "$<TARGET_FILE_DIR:ProjectARESTests>/TorqueLabNativeTests$<TARGET_FILE_SUFFIX:ProjectARESTests>"
+    COMMENT "Creating TorqueLabNativeTests compatibility binary"
+)
+
+add_custom_target(TorqueLabNativeTests DEPENDS ProjectARESTests)
+
+add_test(NAME ProjectARESValidationSuite COMMAND ProjectARESTests)

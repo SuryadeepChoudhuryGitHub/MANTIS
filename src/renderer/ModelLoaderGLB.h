@@ -65,7 +65,7 @@ struct LoadedModelPart {
 };
 
 struct LoadedVehicleModel {
-    std::string modelName{"BMW M4 Coupe"};
+    std::string modelName{"Mars Rover"};
     std::string filePath;
     bool loadedSuccessfully{false};
 

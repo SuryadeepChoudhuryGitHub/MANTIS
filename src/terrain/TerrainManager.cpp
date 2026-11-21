@@ -8,6 +8,7 @@
 #include <BulletCollision/CollisionShapes/btHeightfieldTerrainShape.h>
 #include <BulletCollision/CollisionShapes/btTriangleIndexVertexArray.h>
 #include "physics/PhysicsWorld.h"
+#include "physics/ResourcePath.h"
 #include "renderer/ModelLoaderGLB.h"
 #include "renderer/SkyRendererGL.h"
 #include "renderer/TrackRendererGL.h"
@@ -73,15 +74,16 @@ public:
     }
 
     bool buildPhysics(PhysicsWorld& world) override {
+        const std::string path = ResourcePath::resolve("model/terrain/mars_terrain0.glb");
         LoadedVehicleModel model{};
-        if (!ModelLoaderGLB::loadFromFile("model/terrain/mars_terrain0.glb", model, "", false)) {
-            std::cerr << "[MarsSiteAlphaMap] Error: Failed to load model/terrain/mars_terrain0.glb" << std::endl;
+        if (!ModelLoaderGLB::loadFromFile(path, model, "", false)) {
+            std::cerr << "[MarsSiteAlphaMap] Error: Failed to load " << path << std::endl;
             return false;
         }
 
         const auto& raw = model.chassisCollisionMesh;
         if (raw.vertices.empty() || raw.indices.empty()) {
-            std::cerr << "[MarsSiteAlphaMap] Error: No mesh geometry found in mars_terrain0.glb" << std::endl;
+            std::cerr << "[MarsSiteAlphaMap] Error: No mesh geometry found in " << path << std::endl;
             return false;
         }
 
@@ -117,13 +119,15 @@ public:
     }
 
     bool buildGraphics(TrackRendererGL& renderer) override {
-        LoadedVehicleModel model{};
-        if (!ModelLoaderGLB::loadFromFile("model/terrain/mars_terrain0.glb", model, "", true)) {
+        const std::string path = ResourcePath::resolve("model/terrain/mars_terrain0.glb");
+        m_loadedModel = LoadedVehicleModel{};
+        if (!ModelLoaderGLB::loadFromFile(path, m_loadedModel, "", true)) {
+            std::cerr << "[MarsSiteAlphaMap] Error: Failed to load visual mesh: " << path << std::endl;
             return false;
         }
 
         renderer.clearItems();
-        for (auto& part : model.chassisParts) {
+        for (auto& part : m_loadedModel.chassisParts) {
             TrackRendererGL::RenderableTrackItem item{};
             item.mesh = std::move(part.mesh);
             item.modelMatrix = part.localBindMatrix;
@@ -142,6 +146,7 @@ private:
     std::unique_ptr<btTriangleIndexVertexArray> m_meshData;
     std::vector<float> m_bvhVertices;
     std::vector<unsigned int> m_bvhIndices;
+    LoadedVehicleModel m_loadedModel;
 };
 
 // ============================================================================
@@ -168,14 +173,16 @@ public:
     }
 
     bool buildPhysics(PhysicsWorld& world) override {
+        const std::string path = ResourcePath::resolve("model/terrain/mars_terrain1.glb");
         LoadedVehicleModel model{};
-        if (!ModelLoaderGLB::loadFromFile("model/terrain/mars_terrain1.glb", model, "", false)) {
-            std::cerr << "[MarsSiteBetaMap] Error: Failed to load model/terrain/mars_terrain1.glb" << std::endl;
+        if (!ModelLoaderGLB::loadFromFile(path, model, "", false)) {
+            std::cerr << "[MarsSiteBetaMap] Error: Failed to load " << path << std::endl;
             return false;
         }
 
         const auto& raw = model.chassisCollisionMesh;
         if (raw.vertices.empty() || raw.indices.empty()) {
+            std::cerr << "[MarsSiteBetaMap] Error: No mesh geometry found in " << path << std::endl;
             return false;
         }
 
@@ -210,13 +217,15 @@ public:
     }
 
     bool buildGraphics(TrackRendererGL& renderer) override {
-        LoadedVehicleModel model{};
-        if (!ModelLoaderGLB::loadFromFile("model/terrain/mars_terrain1.glb", model, "", true)) {
+        const std::string path = ResourcePath::resolve("model/terrain/mars_terrain1.glb");
+        m_loadedModel = LoadedVehicleModel{};
+        if (!ModelLoaderGLB::loadFromFile(path, m_loadedModel, "", true)) {
+            std::cerr << "[MarsSiteBetaMap] Error: Failed to load visual mesh: " << path << std::endl;
             return false;
         }
 
         renderer.clearItems();
-        for (auto& part : model.chassisParts) {
+        for (auto& part : m_loadedModel.chassisParts) {
             TrackRendererGL::RenderableTrackItem item{};
             item.mesh = std::move(part.mesh);
             item.modelMatrix = part.localBindMatrix;
@@ -235,6 +244,7 @@ private:
     std::unique_ptr<btTriangleIndexVertexArray> m_meshData;
     std::vector<float> m_bvhVertices;
     std::vector<unsigned int> m_bvhIndices;
+    LoadedVehicleModel m_loadedModel;
 };
 
 // ============================================================================
@@ -263,9 +273,10 @@ public:
     bool loadBinaryData(const std::string& binPath) {
         if (!m_heightfieldData.empty()) return true;
 
-        std::ifstream file(binPath, std::ios::binary);
+        const std::string resolved = ResourcePath::resolve(binPath);
+        std::ifstream file(resolved, std::ios::binary);
         if (!file.is_open()) {
-            std::cerr << "[MarsRegionalDTMMap] Error opening " << binPath << std::endl;
+            std::cerr << "[MarsRegionalDTMMap] Error opening " << resolved << " (requested: " << binPath << ")" << std::endl;
             return false;
         }
 
@@ -393,8 +404,11 @@ public:
                 chunkVertices.reserve(static_cast<size_t>(chunkCols * chunkRows));
 
                 for (int r = rStart; r <= rEnd; r += step) {
+                    const int rClamped = std::min(r, rows - 1);
                     for (int c = cStart; c <= cEnd; c += step) {
-                        const float h = m_heightfieldData[static_cast<size_t>(r * cols + c)];
+                        const int cClamped = std::min(c, cols - 1);
+                        const size_t sampleIdx = static_cast<size_t>(rClamped * cols + cClamped);
+                        const float h = m_heightfieldData[sampleIdx];
                         if (h < yMinChunk) yMinChunk = h;
                         if (h > yMaxChunk) yMaxChunk = h;
 
@@ -403,7 +417,7 @@ public:
                         const float pz = (static_cast<float>(r) - halfDepth) - centerChunkZ;
                         const float py = h;
 
-                        const Vec3& norm = fullNormals[static_cast<size_t>(r * cols + c)];
+                        const Vec3& norm = fullNormals[sampleIdx];
 
                         VertexPNTU v{};
                         v.px = px;

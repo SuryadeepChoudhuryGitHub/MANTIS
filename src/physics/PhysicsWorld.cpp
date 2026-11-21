@@ -509,7 +509,20 @@ double PhysicsWorld::updateFrame(double frameDeltaSeconds) {
 void PhysicsWorld::teleportToPreset(const SpawnPreset& preset) {
     const double eqHeight = computeEquilibriumChassisHeight(vehicle->config);
     const Quat rot = quatFromAxisAngle(Vec3{0.0, 1.0, 0.0}, degToRad(preset.yawDeg));
-    const Vec3 spawnPos{preset.position.x, eqHeight + 0.04, preset.position.z};
+
+    // Dynamically detect ground surface elevation beneath the spawn coordinates
+    double groundY = preset.position.y;
+    const double rayStartY = std::max(preset.position.y + 120.0, 200.0);
+    const double rayEndY   = std::min(preset.position.y - 120.0, -200.0);
+    const auto hit = raycastWorld(
+        Vec3{preset.position.x, rayStartY, preset.position.z},
+        Vec3{preset.position.x, rayEndY,   preset.position.z}
+    );
+    if (hit.hasHit) {
+        groundY = hit.pointWorld.y;
+    }
+
+    const Vec3 spawnPos{preset.position.x, groundY + eqHeight + 0.06, preset.position.z};
     vehicle->resetVehicle(&spawnPos, &rot);
     accumulator = 0.0;
 }

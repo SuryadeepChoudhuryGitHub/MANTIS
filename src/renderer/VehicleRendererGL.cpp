@@ -5,6 +5,7 @@
 #include <cmath>
 #include <filesystem>
 #include <iostream>
+#include "physics/ResourcePath.h"
 
 namespace torquelab {
 
@@ -23,11 +24,8 @@ void VehicleRendererGL::init(const VehicleConfig& config) {
     m_availableVehicles.clear();
 
     namespace fs = std::filesystem;
-    fs::path modelDir = "model";
-    if (!fs::exists(modelDir)) {
-        if (fs::exists("../model")) modelDir = "../model";
-        else if (fs::exists("../../model")) modelDir = "../../model";
-    }
+    const std::string resolvedModelDir = ResourcePath::resolve("model");
+    fs::path modelDir = resolvedModelDir;
 
     if (fs::exists(modelDir)) {
         std::error_code ec;
@@ -58,20 +56,27 @@ void VehicleRendererGL::init(const VehicleConfig& config) {
                 });
 
                 std::string dispName = loaded.modelName.empty() ? stem : loaded.modelName;
+                if (stem == "PerseveranceRover") dispName = "NASA Perseverance Rover (Mars 2020)";
+                else if (stem == "24584_Curiosity_static") dispName = "NASA Curiosity Rover (MSL)";
+                else if (stem == "24883_MER_static") dispName = "NASA Opportunity Rover (MER)";
+
                 m_importedModels[vehId] = std::move(loaded);
                 m_availableVehicles.push_back({vehId, dispName});
-                std::cout << "[VehicleRendererGL] Loaded model: " << dispName << " [id: " << vehId << "]" << std::endl;
+                std::cout << "[VehicleRendererGL] Loaded rover model: " << dispName << " [id: " << vehId << "]" << std::endl;
             }
         }
     }
 
-    // Always include procedural sports coupe option
-    m_availableVehicles.push_back({"procedural_coupe", "Procedural Sports Coupe"});
+    // Always include procedural rover option
+    m_availableVehicles.push_back({"procedural_rover", "ARES Prototype Rover"});
 
     // Set initial active model based on vehicle config
     setActiveVehicleModel(config.id);
     if (!m_useImportedModel && !m_importedModels.empty()) {
-        setActiveVehicleModel(m_importedModels.begin()->first);
+        setActiveVehicleModel("perseverancerover");
+        if (!m_useImportedModel) {
+            setActiveVehicleModel(m_importedModels.begin()->first);
+        }
     }
 
     // Allocate storage for per-wheel imported part transforms
@@ -443,7 +448,7 @@ void VehicleRendererGL::renderMainPass(Shader& mainShader, const Vec3& cameraPos
 
     if (m_useImportedModel && m_activeModel && m_activeModel->loadedSuccessfully) {
         // ---------------------------------------------------------------------
-        // IMPORTED BLENDER VEHICLE MODEL (BMW M4 Coupe / Dodge Challenger / Hummer H2)
+        // IMPORTED MARS ROVER MODEL (Perseverance / Curiosity / Opportunity)
         // ---------------------------------------------------------------------
 
         // 1. Opaque Chassis Parts (Body, hood, trunk, fenders, interior, spoilers)

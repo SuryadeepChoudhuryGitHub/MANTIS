@@ -161,6 +161,7 @@ public:
     VehicleCollisionDiagnostics getCollisionDiagnostics(bool wireframeVisible = true) const;
 
     btDiscreteDynamicsWorld* getDynamicsWorld() const { return m_world.get(); }
+    size_t getNumStaticColliders() const { return m_staticColliders.size(); }
 
     SurfaceSystem surfaceSystem;
     std::vector<TrackBoxElement> trackElements;

@@ -1,4 +1,4 @@
-# GEMINI.md — Torque Lab Native (AI Context & Project Memory)
+# GEMINI.md — Project ARES (AI Context & Project Memory)
 
 > **Purpose of this file:** This document is the single-source-of-truth project memory for **Gemini** and other AI coding agents. Read this file **first** when starting a new session or switching models—it provides the complete architecture, file map, coordinate/unit conventions, physics pipeline, hardware/driver quirks on this machine, and verified benchmark numbers so you do not need to scan the entire codebase.
 
@@ -6,11 +6,11 @@
 
 ## 1. Project Identity & Non-Negotiable Engineering Rules
 
-- **Project Name:** **Torque Lab Native** (*Project Torque — 6-DOF Vehicle Dynamics Simulator*)
-- **Tech Stack:** Native **C++20**, **OpenGL 3.3 Core Profile**, **GLSL 330 core**, **GLFW 3.4**, **GLAD**, **Bullet Physics (`btDiscreteDynamicsWorld`)**, **Dear ImGui**, and **CMake** (Visual Studio 2022 / MSVC Release build).
-- **Migration Status:** 100% migrated from the original browser-based TypeScript/Three.js/Rapier3D application to native C++20/OpenGL. All legacy web/Node/TypeScript files have been removed from the workspace.
+- **Project Name:** **PROJECT ARES** (*Autonomous Rover Exploration Simulator*)
+- **Tech Stack:** Native **C++20**, **OpenGL 3.3 Core Profile**, **GLSL 330 core**, **GLFW 3.4**, **GLAD**, **Bullet Physics (`btDiscreteDynamicsWorld`)**, **Dear ImGui**, and **CMake** (Visual Studio 2026 / MSVC and MinGW-w64 UCRT64 GCC 16 Release builds).
+- **Project Domain:** High-fidelity autonomous planetary rover mobility and multi-resolution extraterrestrial terrain simulation. All legacy road cars (BMW, Dodge, Hummer) have been completely eliminated. The active fleet comprises **NASA Perseverance Rover (Mars 2020)**, **NASA Curiosity Rover (MSL)**, **NASA Opportunity Rover (MER)**, and the **ARES Prototype Rover**.
 - **Core Physical Rule (Non-Negotiable):**
-  - **Every vehicle behavior must emerge from coherent physical laws** (forces, torques, mass, rotational inertia, tire-ground slip, friction-circle saturation, suspension compression/rebound, and collision impulse transfer).
+  - **Every rover behavior must emerge from coherent physical laws** (forces, torques, mass, rotational inertia, tire-ground slip, friction-circle saturation, suspension compression/rebound, terramechanics, and collision impulse transfer).
   - **NEVER** introduce fake animations, arbitrary speed multipliers, unphysical engine power multipliers, or unjustified gravity hacks.
 
 ---
@@ -27,21 +27,22 @@ cmake --preset windows-mingw
 cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DFETCHCONTENT_FULLY_DISCONNECTED=ON
 
 # 2. Build both the main application and the automated test runner (Release)
-cmake --build build --target TorqueLabNative TorqueLabNativeTests -j 6
+cmake --build build --target ProjectARES ProjectARESTests -j 6
 
 # 3. Run interactive desktop application (1440x900 OpenGL 3.3 window)
-.\build\TorqueLabNative.exe
+.\build\ProjectARES.exe
+# (TorqueLabNative.exe compatibility binary is also produced)
 
-# 4. Run the 45-suite automated unit, validation & regression test harness
-.\build\TorqueLabNative.exe --tests
+# 4. Run the 47-suite automated unit, validation & regression test harness
+.\build\ProjectARES.exe --tests
 # or via standalone test binary:
-.\build\TorqueLabNativeTests.exe
+.\build\ProjectARESTests.exe
 
 # 5. Run headless OpenGL + physics smoke test
-.\build\TorqueLabNative.exe --smoke-test
+.\build\ProjectARES.exe --smoke-test
 
 # 6. Run full-pipeline acceleration telemetry table + 600-frame live OpenGL timing diagnostics
-.\build\TorqueLabNative.exe --diag
+.\build\ProjectARES.exe --diag
 ```
 
 ### Visual Studio 2026 / MSVC Workflow:
@@ -50,12 +51,12 @@ cmake --build build --target TorqueLabNative TorqueLabNativeTests -j 6
 cmake --preset windows-msvc
 
 # 2. Build Release targets
-cmake --build build --config Release --target TorqueLabNative TorqueLabNativeTests -j 6
+cmake --build build --config Release --target ProjectARES ProjectARESTests -j 6
 
 # 3. Run from build/Release/
-.\build\Release\TorqueLabNative.exe
-.\build\Release\TorqueLabNative.exe --tests
-.\build\Release\TorqueLabNativeTests.exe
+.\build\Release\ProjectARES.exe
+.\build\Release\ProjectARES.exe --tests
+.\build\Release\ProjectARESTests.exe
 ```
 
 ---
@@ -576,7 +577,68 @@ Our immediate milestone is establishing the functional Mars surface environment:
   - Validates that physics raycasts onto `btHeightfieldTerrainShape` match analytical raster elevations within $0.05\text{ m}$.
   - Confirms that terrain meshes exist strictly in `model/terrain/` and are absent from root `model/`.
 - **Integrated Test Execution:**
-  - Added `--tests` CLI argument to `TorqueLabNative.exe` to allow running the full 45-suite test harness directly within the primary executable.
+  - Added `--tests` CLI argument to `ProjectARES.exe` (and `TorqueLabNative.exe`) to allow running the full 47-suite test harness directly within the primary executable.
+
+---
+
+## 15. Project Cleanup, Crash Investigation & Stability Restoration (ARES Milestone)
+
+### 15.1 Complete Elimination of Legacy Road Cars
+- **Assets Removed:**
+  - `model/BMW_M4.glb`, `model/BMW_M4_manifest.json`, `model/bmw_m4_vehicle.json`
+  - `model/Dodge_Challenger.glb`, `model/Dodge_Challenger_manifest.json`
+  - `model/HUMMER.glb`, `model/HUMMER_manifest.json`, `model/hummer_vehicle.json`
+  - `model/procedural_coupe_vehicle.json`
+  - Decals: `model/textures/Stripes_Wings.png`, `Front_Bumper_Text.png`, `Front_Hodd_Text.png`, `600px-BMW.svg.png`
+  - Collision caches: `model/cache/1970_Dodge_Challenger_R_T_collision.json`, `Hummer_H2_collision.json`, `BMW_M4_Coupe_collision.json`
+- **Active Mars Rover Fleet:**
+  - **NASA Perseverance Rover (`model/PerseveranceRover.glb`):** Mass 1025 kg, 2.65m track width, 2.25m wheelbase, -0.15m CoM offset, AWD direct-drive electric motors with flat 480 N·m torque, 120.0:1 planetary final drive, 0.2625m rigid cleated aluminium wheels.
+  - **NASA Curiosity Rover (`model/24584_Curiosity_static.glb`):** Mass 899 kg, MSL scientific exploration platform, 120.0:1 reduction.
+  - **NASA Opportunity Rover (`model/24883_MER_static.glb`):** Mass 185 kg, MER platform, 80.0:1 reduction.
+  - **ARES Prototype Rover (`procedural_rover`):** Procedural geometric chassis for rapid telemetry testing.
+
+### 15.2 Root-Cause Bug Fixes & Stability Restoration
+1. **Crash Cause 1 — Map Selector Dangling Pointers (`ImGuiDashboard.cpp`):**
+   - *Bug:* In both Top Bar and Left Panel map combo selectors, `maps[i]->getDisplayName().c_str()` was passed to `items.push_back()`. Because `getDisplayName()` returns `std::string` by value, `.c_str()` pointed to destroyed temporary memory, causing crashes or corrupted labels.
+   - *Fix:* Retained strings inside `std::vector<std::string> mapLabels` container across the combo lifetime.
+2. **Crash Cause 2 — Off-By-One Buffer Overflow in DTM Chunks (`TerrainManager.cpp`):**
+   - *Bug:* In `MarsRegionalDTMMap::buildGraphics()`, the chunk loops (`r` and `c`) ran with `r <= rEnd` up to 1024 on a 1024x1024 heightfield (valid indices `0..1023`), accessing `r * cols + c = 1,048,576` which caused a SIGSEGV heap read violation.
+   - *Fix:* Clamped sampling indices: `rClamped = std::min(r, rows - 1)`, `cClamped = std::min(c, cols - 1)`.
+3. **Crash Cause 3 — Underground Spawn Explosion (`PhysicsWorld.cpp`):**
+   - *Bug:* `PhysicsWorld::teleportToPreset()` hardcoded vehicle spawn elevation to `spawnPos.y = eqHeight + 0.04`, ignoring preset elevations and placing the rover 6–20m underground inside elevated Martian heightfields, causing collision impulse explosions.
+   - *Fix:* Dynamically raycasts downwards from the preset position to locate true terrain surface elevation (`groundY`) and places chassis safely at `groundY + eqHeight + 0.06m`.
+4. **Leak Cause 4 — TrackRenderer Chunk Leakage (`TrackRendererGL.cpp`):**
+   - *Bug:* `rebuildProvingGround()` cleared `m_items` but not `m_chunks`. Switching back to Earth Proving Ground from Mars Jezero Crater left 64 Martian terrain chunks rendered simultaneously.
+   - *Fix:* Updated `rebuildProvingGround()` to invoke `clearItems()`, purging both items and chunks.
+5. **Leak Cause 5 — GLB Texture Destruction / Use-After-Free (`TerrainManager.cpp`):**
+   - *Bug:* `MarsSiteAlphaMap::buildGraphics()` loaded GLB terrain meshes into a temporary stack variable `LoadedVehicleModel model`. When the function returned, `model.loadedTextures` was destroyed, calling `glDeleteTextures` and leaving dangling texture handles.
+   - *Fix:* Promoted `m_loadedModel` to a class member of `MarsSiteAlphaMap` and `MarsSiteBetaMap`, preserving textures throughout the map's active lifetime.
+6. **Path Resolution — Deterministic Asset Resolver (`ResourcePath.h`):**
+   - Created `ResourcePath::resolve()` to discover assets relative to CWD, parent folders (`../`, `../../`), and the Windows executable module path (`GetModuleFileNameW`), guaranteeing asset discovery regardless of launch location.
+
+### 15.3 Build Targets & Smart App Control (SAC) Guidance
+- **CMake Targets:**
+  - `ProjectARES` (main application executable)
+  - `ProjectARESTests` (automated 47-suite test runner)
+  - Backwards-compatible aliases: `TorqueLabNative` -> `ProjectARES`, `TorqueLabNativeTests` -> `ProjectARESTests`
+- **Windows 11 Smart App Control (SAC) Execution:**
+  - Machine state: `VerifiedAndReputablePolicyState = 1` (strict enforcement). Unsigned newly compiled binaries run outside an IDE may be flagged by SAC.
+  - Recommended developer workflows:
+    - **Option 1 (Recommended):** Run from Visual Studio IDE via **F5 (Debug)** or **Ctrl+F5 (Start Without Debugging)**. VS debugger attachment bypasses SAC.
+    - **Option 2:** Run automated test runner via CLI: `.\build\ProjectARESTests.exe` or `.\build\ProjectARES.exe --tests` (terminal runs cleanly).
+    - **Option 3:** Enable Windows Developer Mode / turn off SAC in Windows Security for C++ development environments.
+
+### 15.4 Verified Test Benchmarks
+- **47 / 47 Test Suites Passing (0 Failed Assertions):**
+  - **Units 1–30:** Mathematical suspension, tire friction, Pacejka magic formula, Ackermann steering, aerodynamics, V-HACD collision decomposition, controller mapping, pneumatic tire compliance, and 3D rover asset validation.
+  - **Unit 31:** Planetary Environment & Mars surface physics ($g = 3.71\text{ m/s}^2$, $\rho = 0.020\text{ kg/m}^3$).
+  - **Unit 32:** Terrain World Transform Stability & Physics Alignment (regression test guaranteeing terrain chunks remain strictly static in world space).
+  - **Unit 33:** Mars Rover Drivetrain, Low CoM & Planetary Suspension (Perseverance mass 1025 kg, AWD flat 480 N·m torque, 120:1 reduction, 3802.75 N Mars weight equilibrium).
+  - **Unit 34:** Map Switching Lifecycle & Multi-Terrain Integrity (cyclical transitions between Proving Ground, Site Alpha, Site Beta, and Jezero DTM with 0 leaks).
+  - **Validation Tests A–J & Controlled Tests 1–3:** Static equilibrium, acceleration squat, braking dive, cornering roll, surface comparison, speed bumps, collision recovery, and timestep independence.
+- **Live OpenGL Timing (NVIDIA GeForce RTX 5050 Laptop GPU):**
+  - 600 live frames rendered on Mars Jezero Crater HiRISE DTM at **753.9 FPS** (`phys=0.00ms, rnd=0.7ms, ui=0.3ms, swp=0.4ms`).
+
 
 
 

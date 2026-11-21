@@ -51,6 +51,140 @@ double extractDouble(const std::string& line, const std::string& key, double def
 
 } // namespace
 
+VehicleConfig createMarsRoverConfig() {
+    VehicleConfig cfg{};
+    cfg.id = "perseverance_rover";
+    cfg.displayName = "Mars Perseverance Rover";
+    cfg.visualType = VehicleVisualType::ImportedGlb;
+    cfg.modelGlbPath = "model/PerseveranceRover.glb";
+    cfg.modelManifestPath = "";
+    cfg.visualOffset = Vec3{0.0, 0.0, 0.0};
+    cfg.collisionShapeType = CollisionShapeType::Box;
+
+    // Authentic NASA Mars 2020 Perseverance Rover mass & inertia:
+    // Earth Mass = 1025 kg; on Mars (g = 3.71 m/s^2), Weight = 3802.75 N
+    cfg.mass = 1025.0;
+    cfg.comHeightOffset = -0.15; // Low center of gravity for steep slope rollover protection
+    cfg.frontWeightDistribution = 0.50; // Symmetrical weight balance
+    cfg.inertiaTensor = Vec3{1600.0, 1800.0, 850.0};
+
+    // Stance geometry: wide 2.65m track width and 2.25m wheelbase
+    cfg.wheelbase = 2.25;
+    cfg.trackWidth = 2.65;
+    cfg.frontTrackWidth = 2.65;
+    cfg.rearTrackWidth = 2.65;
+    cfg.chassisHalfExtents = Vec3{1.30, 0.65, 1.45};
+    cfg.suspensionMountHeight = 0.25;
+
+    // Rigid aluminium cleated wheels (52.5 cm diameter, non-pneumatic)
+    cfg.wheelRadius = 0.2625;
+    cfg.frontWheelRadius = 0.2625;
+    cfg.rearWheelRadius = 0.2625;
+    cfg.wheelWidth = 0.25;
+    cfg.frontWheelWidth = 0.25;
+    cfg.rearWheelWidth = 0.25;
+    cfg.wheelInertia = 2.2;
+    cfg.tireNominalPressureKpa = 0.0;
+    cfg.frontTirePressureKpa = 0.0;
+    cfg.rearTirePressureKpa = 0.0;
+    cfg.tireRimRadius = 0.2625;
+    cfg.frontTireRimRadius = 0.2625;
+    cfg.rearTireRimRadius = 0.2625;
+
+    // Rocker-bogie compliant suspension (long travel, compliant damping)
+    cfg.suspensionRestLength = 0.55;
+    cfg.suspensionMinLength = 0.20;
+    cfg.suspensionMaxLength = 0.72;
+    cfg.frontSpringStiffness = 18000.0;
+    cfg.rearSpringStiffness = 18000.0;
+    cfg.frontDampingCompression = 4200.0;
+    cfg.frontDampingRebound = 5200.0;
+    cfg.rearDampingCompression = 4200.0;
+    cfg.rearDampingRebound = 5200.0;
+    cfg.frontAntiRollStiffness = 4000.0;
+    cfg.rearAntiRollStiffness = 4000.0;
+
+    // Cleated wheel soil traction
+    cfg.tireFrictionCoeff = 0.95;
+
+    // Electric direct-drive AWD powertrain:
+    cfg.drivetrainLayout = DrivetrainLayout::AWD;
+    cfg.idleRpm = 0.0;
+    cfg.maxRpm = 4500.0;
+    cfg.engineInertia = 0.05;
+    cfg.engineBrakingTorque = 80.0; // Regenerative electric motor braking
+    // Flat electric motor torque curve (maximum torque from stall)
+    cfg.torqueCurve = {
+        {0.0,    480.0},
+        {500.0,  480.0},
+        {1500.0, 480.0},
+        {2500.0, 420.0},
+        {3500.0, 320.0},
+        {4500.0, 180.0}
+    };
+    // Planetary hub reduction drive
+    cfg.gearRatios = {-1.0, 0.0, 1.0};
+    cfg.finalDriveRatio = 120.0;
+    cfg.drivetrainEfficiency = 0.92;
+    cfg.differentialLockingCoeff = 90.0;
+    cfg.shiftDuration = 0.05;
+
+    // Mechanical holding brakes & regenerative service brakes
+    cfg.maxBrakeTorque = 2800.0;
+    cfg.brakeFrontBias = 0.50;
+    cfg.handbrakeTorque = 3200.0;
+    cfg.enableStationaryHold = true;
+
+    // Mars atmospheric aerodynamics
+    cfg.airDensity = 0.020;
+    cfg.dragCoefficient = 0.75;
+    cfg.frontalArea = 2.80;
+    cfg.downforceCoefficient = 0.0;
+    cfg.rollingResistanceCoeff = 0.025;
+    cfg.wheelCollisionFidelity = WheelCollisionFidelity::Detailed;
+
+    return cfg;
+}
+
+VehicleConfig createPerseveranceRoverConfig() {
+    return createMarsRoverConfig();
+}
+
+VehicleConfig createCuriosityRoverConfig() {
+    VehicleConfig cfg = createMarsRoverConfig();
+    cfg.id = "curiosity_rover";
+    cfg.displayName = "Mars Curiosity Rover";
+    cfg.modelGlbPath = "model/24584_Curiosity_static.glb";
+    cfg.mass = 899.0;
+    return cfg;
+}
+
+VehicleConfig createOpportunityRoverConfig() {
+    VehicleConfig cfg = createMarsRoverConfig();
+    cfg.id = "opportunity_mer";
+    cfg.displayName = "MER Opportunity Rover";
+    cfg.modelGlbPath = "model/24883_MER_static.glb";
+    cfg.mass = 185.0;
+    cfg.wheelbase = 1.40;
+    cfg.trackWidth = 1.60;
+    cfg.frontTrackWidth = 1.60;
+    cfg.rearTrackWidth = 1.60;
+    cfg.chassisHalfExtents = Vec3{0.80, 0.45, 0.90};
+    cfg.wheelRadius = 0.13;
+    cfg.frontWheelRadius = 0.13;
+    cfg.rearWheelRadius = 0.13;
+    cfg.finalDriveRatio = 80.0;
+    return cfg;
+}
+
+VehicleConfig createProceduralRoverConfig() {
+    VehicleConfig cfg = createMarsRoverConfig();
+    cfg.id = "procedural_rover";
+    cfg.displayName = "ARES Prototype Rover (Procedural)";
+    cfg.visualType = VehicleVisualType::Procedural;
+    return cfg;
+}
+
 VehicleConfig createProceduralCoupeConfig() {
     VehicleConfig cfg{};
     cfg.id = "procedural_coupe";

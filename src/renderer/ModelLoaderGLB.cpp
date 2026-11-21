@@ -1041,13 +1041,17 @@ bool ModelLoaderGLB::loadFromFile(
                 outModel.modelWheelCenters[0].z, outModel.modelWheelCenters[2].z,
                 outModel.modelWheelCenters[0].z - outModel.modelWheelCenters[2].z);
 
-    // Automated Vehicle Asset Validation Check
-    const auto validationReport = VehicleAssetValidator::validate(outModel);
-    if (!validationReport.passed) {
-        std::cerr << "[ModelLoaderGLB] Asset Validation Warning for " << outModel.modelName << ":\n"
-                  << validationReport.formattedReport << std::endl;
-    } else {
-        std::cout << "[ModelLoaderGLB] Asset Validation PASSED for " << outModel.modelName << std::endl;
+    // Automated Vehicle Asset Validation Check (only for vehicle models, not terrain meshes)
+    std::string lowerPath = outModel.filePath;
+    std::transform(lowerPath.begin(), lowerPath.end(), lowerPath.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (lowerPath.find("terrain") == std::string::npos) {
+        const auto validationReport = VehicleAssetValidator::validate(outModel);
+        if (!validationReport.passed) {
+            std::cerr << "[ModelLoaderGLB] Asset Validation Warning for " << outModel.modelName << ":\n"
+                      << validationReport.formattedReport << std::endl;
+        } else {
+            std::cout << "[ModelLoaderGLB] Asset Validation PASSED for " << outModel.modelName << std::endl;
+        }
     }
 
     return true;

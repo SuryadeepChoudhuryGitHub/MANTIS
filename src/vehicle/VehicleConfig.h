@@ -43,11 +43,11 @@ struct TorqueCurvePoint {
 
 struct VehicleConfig {
     // --- Identification & Visual Asset Binding ---
-    std::string id{"procedural_coupe"};
-    std::string displayName{"Procedural Sports Coupe"};
-    VehicleVisualType visualType{VehicleVisualType::Procedural};
-    std::string modelGlbPath{"model/BMW_M4.glb"};
-    std::string modelManifestPath{"model/BMW_M4_manifest.json"};
+    std::string id{"perseverance_rover"};
+    std::string displayName{"Mars Perseverance Rover"};
+    VehicleVisualType visualType{VehicleVisualType::ImportedGlb};
+    std::string modelGlbPath{"model/PerseveranceRover.glb"};
+    std::string modelManifestPath{""};
     Vec3 visualOffset{0.0, 0.0, 0.0}; // Offset between physics chassis origin and visual model origin
 
     // --- Collision Representation ---
@@ -175,13 +175,20 @@ struct VehicleConfig {
 };
 
 /** Built-in vehicle presets */
+VehicleConfig createMarsRoverConfig();
+VehicleConfig createPerseveranceRoverConfig();
+VehicleConfig createCuriosityRoverConfig();
+VehicleConfig createOpportunityRoverConfig();
+VehicleConfig createProceduralRoverConfig();
+
+// Legacy/testing configurations
 VehicleConfig createProceduralCoupeConfig();
 VehicleConfig createBmwM4Config();
 VehicleConfig createDodgeChallengerConfig();
 VehicleConfig createHummerConfig();
 
 inline VehicleConfig createDefaultVehicleConfig() {
-    return createProceduralCoupeConfig();
+    return createMarsRoverConfig();
 }
 
 /** JSON persistence */

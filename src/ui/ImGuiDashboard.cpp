@@ -227,10 +227,15 @@ void ImGuiDashboard::renderTopBar(
             const auto& maps = terrainManager->getAvailableMaps();
             const std::string curMapId = terrainManager->getActiveMapId();
             int curMapIdx = 0;
+            std::vector<std::string> mapNameStrings;
+            mapNameStrings.reserve(maps.size());
+            for (const auto& m : maps) {
+                mapNameStrings.push_back(m->getDisplayName());
+            }
             std::vector<const char*> mapNames;
             mapNames.reserve(maps.size());
             for (size_t i = 0; i < maps.size(); ++i) {
-                mapNames.push_back(maps[i]->getDisplayName().c_str());
+                mapNames.push_back(mapNameStrings[i].c_str());
                 if (maps[i]->getId() == curMapId) {
                     curMapIdx = static_cast<int>(i);
                 }
@@ -252,10 +257,10 @@ void ImGuiDashboard::renderTopBar(
         std::vector<VehicleOption> topVehicleList = m_availableVehicles;
         if (topVehicleList.empty()) {
             topVehicleList = {
-                {"bmw_m4", "BMW M4 Coupe"},
-                {"dodge_challenger", "Dodge Challenger R/T"},
-                {"hummer", "Hummer H2"},
-                {"procedural_coupe", "Procedural Sports Coupe"}
+                {"perseverance_rover", "Mars Perseverance Rover"},
+                {"curiosity_rover", "Mars Curiosity Rover"},
+                {"opportunity_mer", "MER Opportunity Rover"},
+                {"procedural_rover", "ARES Prototype Rover (Procedural)"}
             };
         }
 
@@ -363,10 +368,15 @@ void ImGuiDashboard::renderLeftPanels(
             const auto& maps = terrainManager->getAvailableMaps();
             const std::string curMapId = terrainManager->getActiveMapId();
             int curMapIdx = 0;
+            std::vector<std::string> mapLabelStrings;
+            mapLabelStrings.reserve(maps.size());
+            for (const auto& m : maps) {
+                mapLabelStrings.push_back(m->getDisplayName());
+            }
             std::vector<const char*> mapLabels;
-            mapLabels.reserve(maps.size());
+            mapLabels.reserve(mapLabelStrings.size());
             for (size_t i = 0; i < maps.size(); ++i) {
-                mapLabels.push_back(maps[i]->getDisplayName().c_str());
+                mapLabels.push_back(mapLabelStrings[i].c_str());
                 if (maps[i]->getId() == curMapId) {
                     curMapIdx = static_cast<int>(i);
                 }
@@ -393,14 +403,14 @@ void ImGuiDashboard::renderLeftPanels(
             ImGui::Separator();
         }
 
-        if (ImGui::CollapsingHeader("VEHICLE SELECTION & CONFIGURATION", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui::CollapsingHeader("ROVER SELECTION & CONFIGURATION", ImGuiTreeNodeFlags_DefaultOpen)) {
             std::vector<VehicleOption> panelVehicleList = m_availableVehicles;
             if (panelVehicleList.empty()) {
                 panelVehicleList = {
-                    {"bmw_m4", "BMW M4 Coupe"},
-                    {"dodge_challenger", "1970 Dodge Challenger R/T"},
-                    {"hummer", "Hummer H2"},
-                    {"procedural_coupe", "Procedural Sports Coupe"}
+                    {"perseverance_rover", "Mars Perseverance Rover"},
+                    {"curiosity_rover", "Mars Curiosity Rover"},
+                    {"opportunity_mer", "MER Opportunity Rover"},
+                    {"procedural_rover", "ARES Prototype Rover (Procedural)"}
                 };
             }
 
@@ -414,7 +424,7 @@ void ImGuiDashboard::renderLeftPanels(
                 }
             }
 
-            ImGui::Text("Active Car:");
+            ImGui::Text("Active Rover:");
             ImGui::SetNextItemWidth(-1.0f);
             if (ImGui::Combo("##PanelCarSelect", &panelCarIdx, fullCarNames.data(), static_cast<int>(fullCarNames.size()))) {
                 if (m_callbacks.onSelectVehicle && panelCarIdx >= 0 && panelCarIdx < static_cast<int>(panelVehicleList.size())) {
@@ -740,17 +750,17 @@ void ImGuiDashboard::renderLeftPanels(
         renderControllerSettings(inputController);
 
         ImGui::Separator();
-        ImGui::TextColored(hexToImVec4(0x38bdf8), "LIVE VEHICLE TUNING LAB");
+        ImGui::TextColored(hexToImVec4(0x38bdf8), "LIVE ROVER TUNING LAB");
         ImGui::SameLine(215.0f);
         if (ImGui::SmallButton("Defaults")) {
-            if (vehicle.config.id == "bmw_m4") {
-                vehicle.config = createBmwM4Config();
-            } else if (vehicle.config.id == "dodge_challenger") {
-                vehicle.config = createDodgeChallengerConfig();
-            } else if (vehicle.config.id == "hummer") {
-                vehicle.config = createHummerConfig();
+            if (vehicle.config.id == "curiosity_rover") {
+                vehicle.config = createCuriosityRoverConfig();
+            } else if (vehicle.config.id == "opportunity_mer") {
+                vehicle.config = createOpportunityRoverConfig();
+            } else if (vehicle.config.id == "procedural_rover") {
+                vehicle.config = createProceduralRoverConfig();
             } else {
-                vehicle.config = createProceduralCoupeConfig();
+                vehicle.config = createMarsRoverConfig();
             }
             vehicle.body.syncMassProperties(vehicle.config);
         }

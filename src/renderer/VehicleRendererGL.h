@@ -47,7 +47,12 @@ public:
     }
     void setActiveVehicleModel(const std::string& vehicleId) {
         m_activeModelId = vehicleId;
-        auto it = m_importedModels.find(vehicleId);
+        std::string lookup = vehicleId;
+        if (lookup == "mars_rover" || lookup == "perseverance") lookup = "perseverancerover";
+        else if (lookup == "curiosity") lookup = "24584_curiosity_static";
+        else if (lookup == "opportunity" || lookup == "mer") lookup = "24883_mer_static";
+
+        auto it = m_importedModels.find(lookup);
         if (it != m_importedModels.end() && it->second.loadedSuccessfully) {
             m_activeModel = &it->second;
             m_useImportedModel = true;
@@ -127,9 +132,9 @@ private:
         bool isTire{false};
     };
 
-    // Procedural sports coupe model data
-    std::string m_proceduralModelName{"Procedural Sports Coupe"};
-    std::string m_proceduralId{"procedural_coupe"};
+    // Procedural rover model data
+    std::string m_proceduralModelName{"ARES Prototype Rover"};
+    std::string m_proceduralId{"procedural_rover"};
     std::vector<VehicleChoice> m_availableVehicles;
     std::vector<ChassisPart> m_chassisParts;
 

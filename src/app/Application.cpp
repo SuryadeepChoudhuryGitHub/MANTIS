@@ -35,12 +35,12 @@ bool Application::init(int width, int height, bool visible) {
     m_window = glfwCreateWindow(
         width,
         height,
-        "Torque Lab Native — 6-DOF Vehicle Dynamics Simulator (C++20 / OpenGL 3.3 / Bullet)",
+        "PROJECT ARES — Autonomous Planetary Rover Exploration Simulator (C++20 / OpenGL 3.3 / Bullet)",
         nullptr,
         nullptr
     );
     if (!m_window) {
-        std::cerr << "[TorqueLabNative] Failed to create GLFW OpenGL 3.3 window." << std::endl;
+        std::cerr << "[ProjectARES] Failed to create GLFW OpenGL 3.3 window." << std::endl;
         glfwTerminate();
         return false;
     }
@@ -49,7 +49,7 @@ bool Application::init(int width, int height, bool visible) {
     glfwSwapInterval(0);
 
     if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress))) {
-        std::cerr << "[TorqueLabNative] Failed to initialize GLAD OpenGL 3.3 loader." << std::endl;
+        std::cerr << "[ProjectARES] Failed to initialize GLAD OpenGL 3.3 loader." << std::endl;
         return false;
     }
 
@@ -72,10 +72,10 @@ bool Application::init(int width, int height, bool visible) {
     ImGui_ImplOpenGL3_Init("#version 330 core");
     m_imguiInitialized = true;
 
-    // 2. Initialize Physics World & Settle Initial Equilibrium
-    VehicleConfig config = createBmwM4Config();
-    loadVehicleConfigFromJson(config, "model/bmw_m4_vehicle.json");
-    m_physicsWorld = std::make_unique<PhysicsWorld>(config, true);
+    // 2. Initialize Physics World with Mars Rover & Mars Environment
+    VehicleConfig config = createMarsRoverConfig();
+    const auto marsEnv = createMarsEnvironment();
+    m_physicsWorld = std::make_unique<PhysicsWorld>(config, true, nullptr, marsEnv);
     for (int i = 0; i < 45; ++i) {
         m_physicsWorld->stepFixed();
     }
@@ -84,12 +84,12 @@ bool Application::init(int width, int height, bool visible) {
     if (!m_mainShader.loadFromFiles("shaders/phong_shadow.vert", "shaders/phong_shadow.frag") ||
         !m_depthShader.loadFromFiles("shaders/shadow_depth.vert", "shaders/shadow_depth.frag") ||
         !m_lineShader.loadFromFiles("shaders/debug_line.vert", "shaders/debug_line.frag")) {
-        std::cerr << "[TorqueLabNative] Failed to compile GLSL shaders." << std::endl;
+        std::cerr << "[ProjectARES] Failed to compile GLSL shaders." << std::endl;
         return false;
     }
 
     if (!m_shadowFBO.init(2048)) {
-        std::cerr << "[TorqueLabNative] Warning: ShadowMapFBO incomplete." << std::endl;
+        std::cerr << "[ProjectARES] Warning: ShadowMapFBO incomplete." << std::endl;
     }
 
     m_trackRenderer.init(m_physicsWorld->trackElements);
@@ -98,6 +98,7 @@ bool Application::init(int width, int height, bool visible) {
     m_debugOverlay.init();
     m_environmentMap.init(256);
     m_skyRenderer.init();
+    m_skyRenderer.setEnvironment(marsEnv);
     m_terrainManager.init();
 
     // 3b. Automatic Model-Derived Collision Generation from Imported 3D Geometry
@@ -119,6 +120,9 @@ bool Application::init(int width, int height, bool visible) {
     for (int i = 0; i < 45; ++i) {
         m_physicsWorld->stepFixed();
     }
+
+    // Initialize with primary Mars Jezero Crater exploration site
+    m_terrainManager.switchMap("mars_jezero_alpha", *m_physicsWorld, m_trackRenderer, m_skyRenderer);
 
     const float aspect = static_cast<float>(m_fbWidth) / static_cast<float>(std::max(1, m_fbHeight));
     m_cameraController = std::make_unique<CameraControllerGL>(aspect);
@@ -161,7 +165,7 @@ bool Application::init(int width, int height, bool visible) {
             runValidationSuite();
         },
         [this](bool enable) {
-            switchActiveVehicle(enable ? "bmw_m4" : "procedural_coupe");
+            switchActiveVehicle(enable ? "perseverance_rover" : "procedural_rover");
         },
         [this]() {
             m_vehicleRenderer.toggleVisualDebug();
@@ -176,7 +180,7 @@ bool Application::init(int width, int height, bool visible) {
             const auto& cfg = m_physicsWorld->vehicle->config;
             const std::string path = "model/" + cfg.id + "_vehicle.json";
             saveVehicleConfigToJson(cfg, path);
-            m_dashboard->showValidationReport("Saved vehicle configuration to " + path, true);
+            m_dashboard->showValidationReport("Saved rover configuration to " + path, true);
         },
         [this]() {
             auto& cfg = m_physicsWorld->vehicle->config;
@@ -190,7 +194,7 @@ bool Application::init(int width, int height, bool visible) {
                 m_physicsWorld->switchVehicle(cfg, col);
                 for (int i = 0; i < 20; ++i) m_physicsWorld->stepFixed();
                 m_vehicleRenderer.syncWithVehicle(*m_physicsWorld->vehicle, 1.0);
-                m_dashboard->showValidationReport("Reloaded vehicle configuration from " + path, true);
+                m_dashboard->showValidationReport("Reloaded rover configuration from " + path, true);
             }
         },
         [this]() {
@@ -201,21 +205,21 @@ bool Application::init(int width, int height, bool visible) {
             if (colIt != m_vehicleCollisions.end() && colIt->second.geometryDerivedSuccessfully) {
                 col = &colIt->second;
             }
-            if (id == "bmw_m4") {
-                cfg = createBmwM4Config();
-            } else if (id == "dodge_challenger") {
-                cfg = createDodgeChallengerConfig();
-            } else if (id == "procedural_coupe") {
-                cfg = createProceduralCoupeConfig();
+            if (id == "curiosity_rover") {
+                cfg = createCuriosityRoverConfig();
+            } else if (id == "opportunity_mer") {
+                cfg = createOpportunityRoverConfig();
+            } else if (id == "procedural_rover") {
+                cfg = createProceduralRoverConfig();
                 col = nullptr;
             } else {
-                cfg = createDefaultVehicleConfig();
+                cfg = createMarsRoverConfig();
                 cfg.id = id;
             }
             m_physicsWorld->switchVehicle(cfg, col);
             for (int i = 0; i < 20; ++i) m_physicsWorld->stepFixed();
             m_vehicleRenderer.syncWithVehicle(*m_physicsWorld->vehicle, 1.0);
-            m_dashboard->showValidationReport("Reset vehicle parameters to defaults", true);
+            m_dashboard->showValidationReport("Reset rover parameters to defaults", true);
         },
         [this](bool enable) {
             m_debugOverlay.showCollisionWireframe = enable;
@@ -347,28 +351,26 @@ void Application::switchActiveVehicle(const std::string& vehicleId) {
         colPtr = &colIt->second;
     }
 
-    if (vehicleId == "bmw_m4") {
-        cfg = createBmwM4Config();
-    } else if (vehicleId == "dodge_challenger") {
-        cfg = createDodgeChallengerConfig();
-    } else if (vehicleId == "hummer") {
-        cfg = createHummerConfig();
-    } else if (vehicleId == "procedural_coupe") {
-        cfg = createProceduralCoupeConfig();
+    if (vehicleId == "curiosity_rover" || vehicleId == "24584_curiosity_static") {
+        cfg = createCuriosityRoverConfig();
+    } else if (vehicleId == "opportunity_mer" || vehicleId == "24883_mer_static") {
+        cfg = createOpportunityRoverConfig();
+    } else if (vehicleId == "procedural_rover" || vehicleId == "procedural_coupe") {
+        cfg = createProceduralRoverConfig();
         colPtr = nullptr;
     } else {
-        // Generic newly added vehicle from model/
+        cfg = createMarsRoverConfig();
         if (colPtr) {
             VehicleCollisionGenerator::applyDerivedGeometryToConfig(*colPtr, cfg);
         }
         cfg.id = vehicleId;
     }
 
-    // Load custom vehicle tuning JSON if it exists (e.g. model/<id>_vehicle.json)
+    // Load custom rover tuning JSON if it exists (e.g. model/<id>_vehicle.json)
     const std::string jsonPath = "model/" + vehicleId + "_vehicle.json";
     loadVehicleConfigFromJson(cfg, jsonPath);
 
-    if (colPtr && vehicleId != "procedural_coupe") {
+    if (colPtr && vehicleId != "procedural_rover") {
         VehicleCollisionGenerator::applyDerivedGeometryToConfig(*colPtr, cfg);
     }
 
@@ -675,6 +677,12 @@ void Application::shutdown() {
     if (s_activeApp == this) {
         s_activeApp = nullptr;
     }
+
+    m_dashboard.reset();
+    m_cameraController.reset();
+    m_inputController.reset();
+    m_physicsWorld.reset();
+
     if (m_imguiInitialized) {
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();

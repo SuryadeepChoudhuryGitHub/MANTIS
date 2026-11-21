@@ -183,7 +183,7 @@ void TrackRendererGL::buildEnvironmentTerrain(Color3 groundColor) {
 }
 
 void TrackRendererGL::rebuildProvingGround(const std::vector<TrackBoxElement>& elements) {
-    m_items.clear();
+    clearItems();
     buildTrackMeshes(elements);
     buildReferenceMarkers();
     buildEnvironmentTerrain(Color3::fromHex(0x22462b));
