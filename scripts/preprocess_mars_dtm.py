@@ -27,8 +27,12 @@ def preprocess_dtm(
     print("=" * 70)
     
     if not os.path.exists(input_path):
-        print(f"[Error] Input GeoTIFF not found: {input_path}")
-        sys.exit(1)
+        alt_path = os.path.join("model", "terrain", os.path.basename(input_path))
+        if os.path.exists(alt_path):
+            input_path = alt_path
+        else:
+            print(f"[Error] Input GeoTIFF not found: {input_path}")
+            sys.exit(1)
 
     file_size = os.path.getsize(input_path)
     print(f"Input File: {input_path} ({file_size / (1024*1024):.2f} MB)")

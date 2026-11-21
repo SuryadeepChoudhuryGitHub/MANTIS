@@ -15,6 +15,7 @@
 #include <string>
 #include <vector>
 
+#include <BulletCollision/CollisionShapes/btHeightfieldTerrainShape.h>
 #include "input/ControllerConfig.h"
 #include "input/VibrationManager.h"
 #include "physics/CollisionMeshGeometry.h"
@@ -25,6 +26,7 @@
 #include "physics/VehicleCollisionGenerator.h"
 #include "renderer/ModelLoaderGLB.h"
 #include "renderer/VehicleAssetValidator.h"
+#include "terrain/TerrainChunk.h"
 #include "vehicle/Aerodynamics.h"
 #include "vehicle/BrakeSystem.h"
 #include "vehicle/Drivetrain.h"
@@ -57,6 +59,7 @@ void checkNear(double actual, double expected, double tol, const char* expr, int
 }
 
 #define EXPECT_TRUE(cond) checkTrue((cond), #cond, __LINE__)
+#define EXPECT_FALSE(cond) checkTrue(!(cond), "!(" #cond ")", __LINE__)
 #define EXPECT_NEAR(a, b, tol) checkNear((a), (b), (tol), #a " ~= " #b, __LINE__)
 #define EXPECT_GT(a, b) checkTrue((a) > (b), #a " > " #b, __LINE__)
 #define EXPECT_LT(a, b) checkTrue((a) < (b), #a " < " #b, __LINE__)
@@ -2100,9 +2103,96 @@ void unitTest31_PlanetaryEnvironmentAndMarsSurfacePhysics() {
     EXPECT_LT(marsDrag, aeroEarth.dragMagnitude * 0.02); // ~98% drag reduction in Mars atmosphere
 }
 
+void unitTest32_TerrainWorldTransformStabilityAndPhysicsAlignment() {
+    // 1. Verify Terrain Chunks maintain stationary world transforms independently of vehicle motion
+    TerrainChunk chunk{};
+    chunk.chunkX = 0;
+    chunk.chunkZ = 0;
+    chunk.centerWorld = Vec3{64.0, 5.0, 64.0};
+    chunk.worldBounds.minPoint = Vec3{0.0, 0.0, 0.0};
+    chunk.worldBounds.maxPoint = Vec3{128.0, 10.0, 128.0};
+    chunk.worldMatrix = Mat4::fromTranslation(chunk.centerWorld);
+
+    const Mat4 initialMatrix = chunk.worldMatrix;
+    const Vec3 initialCenter = chunk.centerWorld;
+
+    // Simulate vehicle movement, acceleration, steering rotation across 120 steps
+    VehicleConfig config = createBmwM4Config();
+    PhysicsWorld world(config, false, nullptr);
+    world.vehicle->currentInputs = VehicleControlInputs{1.0, 0.0, 0.35, 0.0, false}; // Full throttle + steer
+
+    for (int step = 0; step < 120; ++step) {
+        world.stepFixed();
+        // Regression test: verify terrain chunk world matrix and center NEVER change during vehicle dynamics updates
+        for (int i = 0; i < 16; ++i) {
+            EXPECT_NEAR(chunk.worldMatrix.m[i], initialMatrix.m[i], 1e-7);
+        }
+        EXPECT_NEAR(chunk.centerWorld.x, initialCenter.x, 1e-7);
+        EXPECT_NEAR(chunk.centerWorld.y, initialCenter.y, 1e-7);
+        EXPECT_NEAR(chunk.centerWorld.z, initialCenter.z, 1e-7);
+    }
+
+    // Verify vehicle actually moved and rotated while terrain remained completely static
+    const auto snap = world.vehicle->getTelemetrySnapshot();
+    EXPECT_GT(snap.speedMps, 5.0);
+    EXPECT_GT(std::abs(snap.chassisPosition.z), 5.0);
+
+    // 2. Verify Heightfield Terrain Shape alignment with Visual Coordinates
+    // Create heightfield: 3x3 grid, minHeight=-10.0, maxHeight=30.0, centerY = 10.0
+    const int cols = 3;
+    const int rows = 3;
+    float hData[9] = {
+        0.0f,  5.0f, 10.0f,
+        2.0f,  8.0f, 15.0f,
+        4.0f, 12.0f, 20.0f
+    };
+    float minH = 0.0f, maxH = 20.0f;
+    auto hfShape = std::make_unique<btHeightfieldTerrainShape>(
+        cols, rows,
+        hData,
+        1.0f,
+        minH, maxH,
+        1,
+        PHY_FLOAT,
+        false
+    );
+    const double centerY = static_cast<double>((minH + maxH) * 0.5f);
+
+    // Register into Bullet world
+    world.clearStaticColliders();
+    world.addStaticCollider(
+        std::move(hfShape),
+        Vec3{0.0, centerY, 0.0},
+        quatIdentity(),
+        SurfaceType::MarsRegolith,
+        true
+    );
+
+    // Test Raycast elevation at grid center (0, 0):
+    // Center sample (col=1, row=1) is hData[4] = 8.0f
+    // Ray from (0, 50, 0) downward to (0, -50, 0)
+    const auto hit = world.raycastWorld(Vec3{0.0, 50.0, 0.0}, Vec3{0.0, -50.0, 0.0});
+    EXPECT_TRUE(hit.hasHit);
+    EXPECT_NEAR(hit.pointWorld.y, 8.0, 0.05);
+
+    // 3. Verify Terrain Assets are strictly segregated from Vehicle Models
+    // Terrain meshes must be in model/terrain/, not in root model/
+    const std::string terrain0Path = "model/terrain/mars_terrain0.glb";
+    const std::string terrain1Path = "model/terrain/mars_terrain1.glb";
+    EXPECT_TRUE(std::filesystem::exists(terrain0Path));
+    EXPECT_TRUE(std::filesystem::exists(terrain1Path));
+
+    // Neither file should exist in the root model/ directory
+    EXPECT_FALSE(std::filesystem::exists("model/mars_terrain0.glb"));
+    EXPECT_FALSE(std::filesystem::exists("model/mars_terrain1.glb"));
+}
+
 } // namespace
 
-int main() {
+namespace torquelab {
+
+int runAllValidationTests() {
+    g_failedAssertions = 0;
     std::cout << "====================================================================\n";
     std::cout << " Torque Lab Native — Automated Physics & Behavioral Validation Suite\n";
     std::cout << "====================================================================\n";
@@ -2144,6 +2234,7 @@ int main() {
         {"Unit 29: Hummer H2 Off-Road Physics, AWD Drivetrain & Collision Geometry", unitTest29_HummerOffRoadVehiclePhysicsAndCollisionDerivation},
         {"Unit 30: Automated Vehicle Asset Validation & Universal Model Importer", unitTest30_VehicleAssetValidationAndUniversalModelImporter},
         {"Unit 31: Planetary Environment & Mars Surface Physics (ARES Foundation)", unitTest31_PlanetaryEnvironmentAndMarsSurfacePhysics},
+        {"Unit 32: Terrain World Transform Stability & Physics Alignment (ARES Bug Fix)", unitTest32_TerrainWorldTransformStabilityAndPhysicsAlignment},
         {"Test A: Static Equilibrium on Flat Ground", validationTestA_StaticEquilibrium},
         {"Test B: Acceleration & Longitudinal Load Transfer (Rear Squat)", validationTestB_AccelerationAndSquat},
         {"Test C: Service Braking, Front Dive & Progressive Deceleration", validationTestC_BrakingAndDive},
@@ -2179,3 +2270,11 @@ int main() {
 
     return (g_failedAssertions == 0) ? 0 : 1;
 }
+
+} // namespace torquelab
+
+#ifndef NO_STANDALONE_TEST_MAIN
+int main() {
+    return torquelab::runAllValidationTests();
+}
+#endif

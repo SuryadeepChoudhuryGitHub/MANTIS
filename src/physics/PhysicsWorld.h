@@ -130,6 +130,19 @@ public:
      */
     double updateFrame(double frameDeltaSeconds);
 
+    struct RaycastHit {
+        bool hasHit{false};
+        Vec3 pointWorld{0.0, 0.0, 0.0};
+        Vec3 normalWorld{0.0, 1.0, 0.0};
+        double distance{0.0};
+        int colliderHandle{0};
+    };
+
+    /**
+     * Performs a world-space line raycast against all static and dynamic colliders in the Bullet world.
+     */
+    RaycastHit raycastWorld(const Vec3& from, const Vec3& to) const;
+
     /**
      * Teleports the vehicle to a named Proving Ground zone preset.
      */

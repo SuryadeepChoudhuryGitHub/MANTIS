@@ -74,8 +74,8 @@ public:
 
     bool buildPhysics(PhysicsWorld& world) override {
         LoadedVehicleModel model{};
-        if (!ModelLoaderGLB::loadFromFile("model/mars_terrain0.glb", model, "", false)) {
-            std::cerr << "[MarsSiteAlphaMap] Error: Failed to load model/mars_terrain0.glb" << std::endl;
+        if (!ModelLoaderGLB::loadFromFile("model/terrain/mars_terrain0.glb", model, "", false)) {
+            std::cerr << "[MarsSiteAlphaMap] Error: Failed to load model/terrain/mars_terrain0.glb" << std::endl;
             return false;
         }
 
@@ -118,7 +118,7 @@ public:
 
     bool buildGraphics(TrackRendererGL& renderer) override {
         LoadedVehicleModel model{};
-        if (!ModelLoaderGLB::loadFromFile("model/mars_terrain0.glb", model, "", true)) {
+        if (!ModelLoaderGLB::loadFromFile("model/terrain/mars_terrain0.glb", model, "", true)) {
             return false;
         }
 
@@ -169,8 +169,8 @@ public:
 
     bool buildPhysics(PhysicsWorld& world) override {
         LoadedVehicleModel model{};
-        if (!ModelLoaderGLB::loadFromFile("model/mars_terrain1.glb", model, "", false)) {
-            std::cerr << "[MarsSiteBetaMap] Error: Failed to load model/mars_terrain1.glb" << std::endl;
+        if (!ModelLoaderGLB::loadFromFile("model/terrain/mars_terrain1.glb", model, "", false)) {
+            std::cerr << "[MarsSiteBetaMap] Error: Failed to load model/terrain/mars_terrain1.glb" << std::endl;
             return false;
         }
 
@@ -211,7 +211,7 @@ public:
 
     bool buildGraphics(TrackRendererGL& renderer) override {
         LoadedVehicleModel model{};
-        if (!ModelLoaderGLB::loadFromFile("model/mars_terrain1.glb", model, "", true)) {
+        if (!ModelLoaderGLB::loadFromFile("model/terrain/mars_terrain1.glb", model, "", true)) {
             return false;
         }
 
@@ -333,32 +333,19 @@ public:
 
         renderer.clearItems();
 
-        // Build OpenGL grid mesh:
-        // Use step=2 (every 2m) for 512x512 vertices = 262k vertices, 524k triangles, ultra-fast 1000 FPS!
-        const int step = 2;
         const int cols = 1024;
         const int rows = 1024;
-        const int gridW = cols / step;
-        const int gridH = rows / step;
-
-        std::vector<VertexPNTU> vertices;
-        vertices.reserve(static_cast<size_t>(gridW * gridH));
-
         const float halfWidth = 0.5f * static_cast<float>(cols - 1);
         const float halfDepth = 0.5f * static_cast<float>(rows - 1);
 
-        for (int r = 0; r < rows; r += step) {
-            for (int c = 0; c < cols; c += step) {
-                const float h = m_heightfieldData[static_cast<size_t>(r * cols + c)];
-                const float px = static_cast<float>(c) - halfWidth;
-                const float pz = static_cast<float>(r) - halfDepth;
-                const float py = h;
-
-                // Central difference normal calculation
+        // Precompute seamless vertex normals across full dataset using central differences
+        std::vector<Vec3> fullNormals(static_cast<size_t>(cols * rows));
+        for (int r = 0; r < rows; ++r) {
+            const int rPrev = std::max(0, r - 1);
+            const int rNext = std::min(rows - 1, r + 1);
+            for (int c = 0; c < cols; ++c) {
                 const int cPrev = std::max(0, c - 1);
                 const int cNext = std::min(cols - 1, c + 1);
-                const int rPrev = std::max(0, r - 1);
-                const int rNext = std::min(rows - 1, r + 1);
 
                 const float hL = m_heightfieldData[static_cast<size_t>(r * cols + cPrev)];
                 const float hR = m_heightfieldData[static_cast<size_t>(r * cols + cNext)];
@@ -368,53 +355,107 @@ public:
                 const float dx = (hR - hL) / static_cast<float>(cNext - cPrev);
                 const float dz = (hU - hD) / static_cast<float>(rNext - rPrev);
 
-                Vec3 norm = vec3Normalize(Vec3{-static_cast<double>(dx), 1.0, -static_cast<double>(dz)});
-
-                VertexPNTU v{};
-                v.px = px;
-                v.py = py;
-                v.pz = pz;
-                v.nx = static_cast<float>(norm.x);
-                v.ny = static_cast<float>(norm.y);
-                v.nz = static_cast<float>(norm.z);
-                v.u = static_cast<float>(c) / static_cast<float>(cols - 1) * 32.0f;
-                v.v = static_cast<float>(r) / static_cast<float>(rows - 1) * 32.0f;
-                vertices.push_back(v);
+                fullNormals[static_cast<size_t>(r * cols + c)] = vec3Normalize(Vec3{-static_cast<double>(dx), 1.0, -static_cast<double>(dz)});
             }
         }
 
-        std::vector<unsigned int> indices;
-        indices.reserve(static_cast<size_t>((gridW - 1) * (gridH - 1) * 6));
+        // Divide 1024x1024 terrain into an 8x8 grid of spatial chunks (128m x 128m each)
+        const int numChunksX = 8;
+        const int numChunksZ = 8;
+        const int samplesPerChunkX = 128;
+        const int samplesPerChunkZ = 128;
+        const int step = 2; // 2m resolution per quad (65x65 vertices per chunk = 4,225 vertices)
 
-        for (int j = 0; j < gridH - 1; ++j) {
-            for (int i = 0; i < gridW - 1; ++i) {
-                const unsigned int i0 = static_cast<unsigned int>(j * gridW + i);
-                const unsigned int i1 = static_cast<unsigned int>(j * gridW + (i + 1));
-                const unsigned int i2 = static_cast<unsigned int>((j + 1) * gridW + i);
-                const unsigned int i3 = static_cast<unsigned int>((j + 1) * gridW + (i + 1));
+        const MaterialProps regolithMat = renderer.getSurfaceMaterial(SurfaceType::MarsRegolith);
 
-                indices.push_back(i0);
-                indices.push_back(i2);
-                indices.push_back(i1);
+        for (int cz = 0; cz < numChunksZ; ++cz) {
+            const int rStart = cz * samplesPerChunkZ;
+            const int rEnd = (cz + 1) * samplesPerChunkZ; // shared border vertex with adjacent chunk
+            const int chunkRows = (rEnd - rStart) / step + 1; // 65
 
-                indices.push_back(i1);
-                indices.push_back(i2);
-                indices.push_back(i3);
+            for (int cx = 0; cx < numChunksX; ++cx) {
+                const int cStart = cx * samplesPerChunkX;
+                const int cEnd = (cx + 1) * samplesPerChunkX; // shared border vertex with adjacent chunk
+                const int chunkCols = (cEnd - cStart) / step + 1; // 65
+
+                const float xMin = static_cast<float>(cStart) - halfWidth;
+                const float xMax = static_cast<float>(cEnd) - halfWidth;
+                const float zMin = static_cast<float>(rStart) - halfDepth;
+                const float zMax = static_cast<float>(rEnd) - halfDepth;
+
+                const float centerChunkX = (xMin + xMax) * 0.5f;
+                const float centerChunkZ = (zMin + zMax) * 0.5f;
+
+                float yMinChunk = 1e9f;
+                float yMaxChunk = -1e9f;
+
+                std::vector<VertexPNTU> chunkVertices;
+                chunkVertices.reserve(static_cast<size_t>(chunkCols * chunkRows));
+
+                for (int r = rStart; r <= rEnd; r += step) {
+                    for (int c = cStart; c <= cEnd; c += step) {
+                        const float h = m_heightfieldData[static_cast<size_t>(r * cols + c)];
+                        if (h < yMinChunk) yMinChunk = h;
+                        if (h > yMaxChunk) yMaxChunk = h;
+
+                        // Chunk-local coordinates relative to chunk center for maximum floating-point precision
+                        const float px = (static_cast<float>(c) - halfWidth) - centerChunkX;
+                        const float pz = (static_cast<float>(r) - halfDepth) - centerChunkZ;
+                        const float py = h;
+
+                        const Vec3& norm = fullNormals[static_cast<size_t>(r * cols + c)];
+
+                        VertexPNTU v{};
+                        v.px = px;
+                        v.py = py;
+                        v.pz = pz;
+                        v.nx = static_cast<float>(norm.x);
+                        v.ny = static_cast<float>(norm.y);
+                        v.nz = static_cast<float>(norm.z);
+                        v.u = static_cast<float>(c) / static_cast<float>(cols - 1) * 32.0f;
+                        v.v = static_cast<float>(r) / static_cast<float>(rows - 1) * 32.0f;
+                        chunkVertices.push_back(v);
+                    }
+                }
+
+                std::vector<unsigned int> chunkIndices;
+                chunkIndices.reserve(static_cast<size_t>((chunkCols - 1) * (chunkRows - 1) * 6));
+
+                for (int j = 0; j < chunkRows - 1; ++j) {
+                    for (int i = 0; i < chunkCols - 1; ++i) {
+                        const unsigned int i0 = static_cast<unsigned int>(j * chunkCols + i);
+                        const unsigned int i1 = static_cast<unsigned int>(j * chunkCols + (i + 1));
+                        const unsigned int i2 = static_cast<unsigned int>((j + 1) * chunkCols + i);
+                        const unsigned int i3 = static_cast<unsigned int>((j + 1) * chunkCols + (i + 1));
+
+                        chunkIndices.push_back(i0);
+                        chunkIndices.push_back(i2);
+                        chunkIndices.push_back(i1);
+
+                        chunkIndices.push_back(i1);
+                        chunkIndices.push_back(i2);
+                        chunkIndices.push_back(i3);
+                    }
+                }
+
+                Mesh::computeTangents(chunkVertices, chunkIndices);
+
+                TerrainChunk chunk{};
+                chunk.chunkX = cx;
+                chunk.chunkZ = cz;
+                chunk.centerWorld = Vec3{centerChunkX, static_cast<double>((yMinChunk + yMaxChunk) * 0.5f), centerChunkZ};
+                chunk.worldBounds.minPoint = Vec3{xMin, yMinChunk, zMin};
+                chunk.worldBounds.maxPoint = Vec3{xMax, yMaxChunk, zMax};
+                chunk.worldMatrix = Mat4::fromTranslation(Vec3{centerChunkX, 0.0, centerChunkZ});
+                chunk.material = regolithMat;
+                chunk.material.receiveShadows = true;
+                chunk.material.castShadows = true;
+                chunk.isVisible = true;
+
+                chunk.mesh.upload(chunkVertices, chunkIndices);
+                renderer.addTerrainChunk(std::move(chunk));
             }
         }
-
-        Mesh::computeTangents(vertices, indices);
-
-        Mesh dtmMesh;
-        dtmMesh.upload(vertices, indices);
-
-        TrackRendererGL::RenderableTrackItem item{};
-        item.mesh = std::move(dtmMesh);
-        item.modelMatrix = Mat4::identity();
-        item.material = renderer.getSurfaceMaterial(SurfaceType::MarsRegolith);
-        item.material.receiveShadows = true;
-        item.material.castShadows = true;
-        renderer.addRenderableItem(std::move(item));
 
         const auto env = getEnvironment();
         renderer.buildEnvironmentTerrain(env.groundHazeColor);

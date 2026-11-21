@@ -4,6 +4,7 @@
 #include "app/Application.h"
 #include "physics/VehicleCollisionGenerator.h"
 #include "vehicle/Drivetrain.h"
+#include "../../tests/native_validation_tests.h"
 
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -89,6 +90,7 @@ void runFullPipelineDiagnostics() {
 int main(int argc, char** argv) {
     bool smokeTest = false;
     bool runDiag = false;
+    bool runTests = false;
     bool bakeCollisions = false;
     bool forceBake = false;
     for (int i = 1; i < argc; ++i) {
@@ -97,12 +99,18 @@ int main(int argc, char** argv) {
             smokeTest = true;
         } else if (arg == "--diag") {
             runDiag = true;
+        } else if (arg == "--tests" || arg == "-t" || arg == "--test") {
+            runTests = true;
         } else if (arg == "--bake-collisions" || arg == "-b") {
             bakeCollisions = true;
         } else if (arg == "--force-bake") {
             bakeCollisions = true;
             forceBake = true;
         }
+    }
+
+    if (runTests) {
+        return torquelab::runAllValidationTests();
     }
 
     if (bakeCollisions) {

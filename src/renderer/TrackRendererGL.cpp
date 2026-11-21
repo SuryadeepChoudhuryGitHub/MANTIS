@@ -138,10 +138,19 @@ void TrackRendererGL::buildReferenceMarkers() {
 
 void TrackRendererGL::clearItems() {
     m_items.clear();
+    m_chunks.clear();
 }
 
 void TrackRendererGL::addRenderableItem(RenderableTrackItem item) {
     m_items.push_back(std::move(item));
+}
+
+void TrackRendererGL::clearTerrainChunks() {
+    m_chunks.clear();
+}
+
+void TrackRendererGL::addTerrainChunk(TerrainChunk chunk) {
+    m_chunks.push_back(std::move(chunk));
 }
 
 const MaterialProps& TrackRendererGL::getSurfaceMaterial(SurfaceType type) const {
@@ -212,6 +221,11 @@ void TrackRendererGL::renderShadowPass(Shader& depthShader) const {
         depthShader.setMat4("uModel", item.modelMatrix);
         item.mesh.draw();
     }
+    for (const auto& chunk : m_chunks) {
+        if (!chunk.material.castShadows || !chunk.isVisible) continue;
+        depthShader.setMat4("uModel", chunk.worldMatrix);
+        chunk.mesh.draw();
+    }
 }
 
 void TrackRendererGL::renderMainPass(Shader& mainShader) const {
@@ -219,6 +233,12 @@ void TrackRendererGL::renderMainPass(Shader& mainShader) const {
         mainShader.applyMaterial(item.material);
         mainShader.setMat4("uModel", item.modelMatrix);
         item.mesh.draw();
+    }
+    for (const auto& chunk : m_chunks) {
+        if (!chunk.isVisible) continue;
+        mainShader.applyMaterial(chunk.material);
+        mainShader.setMat4("uModel", chunk.worldMatrix);
+        chunk.mesh.draw();
     }
 }
 

@@ -40,6 +40,9 @@ void VehicleRendererGL::init(const VehicleConfig& config) {
 
             const std::string glbPath = entry.path().string();
             const std::string stem = entry.path().stem().string();
+            std::string lowerStem = stem;
+            std::transform(lowerStem.begin(), lowerStem.end(), lowerStem.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (lowerStem.find("terrain") != std::string::npos) continue; // Never import terrain meshes as vehicle chassis
 
             // Check for companion manifest
             std::string manifestPath = (modelDir / (stem + "_manifest.json")).string();

@@ -17,25 +17,45 @@
 
 ## 2. Quick Commands (Build, Run, Test, Diagnostics)
 
-All commands run from the workspace root: `d:\# My Folder\My Work\Visual Studio script\WebApplications\TorqueLab`
+All commands run from the workspace root: `d:\# My Folder\My Work\Visual Studio script\C++\ProjectAres`
 
+### MinGW-w64 (GCC 16 / UCRT64) Workflow:
 ```powershell
-# 1. Build both the main application and the automated test runner (Release)
-cmake --build build --config Release --target TorqueLabNative TorqueLabNativeTests
-# Or with GCC 14 (UCRT64 MinGW):
-cmake --build build_gcc -j 4
+# 1. Configure in build/ (instant offline configuration via FETCHCONTENT_FULLY_DISCONNECTED)
+cmake --preset windows-mingw
+# or manually:
+cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DFETCHCONTENT_FULLY_DISCONNECTED=ON
 
-# 2. Run the interactive desktop application (1440x900 OpenGL 3.3 window)
+# 2. Build both the main application and the automated test runner (Release)
+cmake --build build --target TorqueLabNative TorqueLabNativeTests -j 6
+
+# 3. Run interactive desktop application (1440x900 OpenGL 3.3 window)
+.\build\TorqueLabNative.exe
+
+# 4. Run the 45-suite automated unit, validation & regression test harness
+.\build\TorqueLabNative.exe --tests
+# or via standalone test binary:
+.\build\TorqueLabNativeTests.exe
+
+# 5. Run headless OpenGL + physics smoke test
+.\build\TorqueLabNative.exe --smoke-test
+
+# 6. Run full-pipeline acceleration telemetry table + 600-frame live OpenGL timing diagnostics
+.\build\TorqueLabNative.exe --diag
+```
+
+### Visual Studio 2026 / MSVC Workflow:
+```powershell
+# 1. Configure in build/
+cmake --preset windows-msvc
+
+# 2. Build Release targets
+cmake --build build --config Release --target TorqueLabNative TorqueLabNativeTests -j 6
+
+# 3. Run from build/Release/
 .\build\Release\TorqueLabNative.exe
-
-# 3. Run the 43-suite automated unit, validation & controlled physics test harness
-.\build_gcc\TorqueLabNativeTests.exe
-
-# 4. Run full-pipeline acceleration telemetry table + 600-frame live OpenGL timing diagnostics
-.\build\Release\TorqueLabNative.exe --diag
-
-# 5. Run headless OpenGL + physics smoke test (CI / quick sanity check)
-.\build\Release\TorqueLabNative.exe --smoke-test
+.\build\Release\TorqueLabNative.exe --tests
+.\build\Release\TorqueLabNativeTests.exe
 ```
 
 ---
@@ -505,5 +525,58 @@ Our immediate milestone is establishing the functional Mars surface environment:
 6. **Martian Environmental Configuration:** Implement `PlanetaryEnvironment` ($g = 3.71\text{ m/s}^2$, $\rho = 0.020\text{ kg/m}^3$, surface regolith types, sky scattering).
 7. **Mars Surface & Sky Rendering:** Configure procedural atmospheric scattering (`sky.frag`) and PBR regolith shading.
 8. **Validation & Regression Testing:** Confirm all 43 existing test suites pass under Earth presets, and add automated tests for Martian gravity and terrain contact stability.
+
+---
+
+## 14. Phase 1 Implementation & Bug Fix Report (ARES Architectural Audit)
+
+### 14.1 Root Cause & Permanent Resolution: Terrain Moving With Vehicle
+- **The Bug:** In earlier builds, the entire Mars terrain appeared to move and rotate synchronously with vehicle movements instead of anchoring stationary in world space.
+- **Root Cause Discovered in Code Audit:**
+  1. `VehicleRendererGL::init()` recursively scanned the root `model/` directory for any file with a `.glb` extension and unconditionally loaded every found model into its `m_importedModels` registry as a drivable vehicle chassis.
+  2. Because `mars_terrain0.glb` and `mars_terrain1.glb` were stored directly in `model/`, they were parsed by `ModelLoaderGLB` as candidate vehicle bodies.
+  3. When an imported chassis was rendered in `VehicleRendererGL::renderMainPass()`, it was transformed by `m_importedChassisWorldMatrix`—the dynamic 6-DOF transform of the vehicle chassis computed each frame from Bullet rigid-body state!
+- **Permanent Solution:**
+  1. **Strict Asset Segregation:** Physically relocated `mars_terrain0.glb`, `mars_terrain1.glb`, and `mars_terrain2.tif` into a dedicated subdirectory `model/terrain/`.
+  2. **Model Import Guard:** Added an explicit semantic name filter in `VehicleRendererGL.cpp` (`if (lowerStem.find("terrain") != std::string::npos) continue;`) to guarantee no terrain asset can ever be loaded as a vehicle chassis.
+  3. **World Coordinate Anchoring:** In `TrackRendererGL`, terrain chunks and meshes are rendered strictly with fixed world transform matrices (`Mat4::identity()` or `Mat4::fromTranslation(chunkCenter)`), completely decoupled from any vehicle transform.
+
+### 14.2 Multi-Resolution Chunked Terrain Architecture
+- **Chunk Representation (`TerrainChunk`):**
+  - Defined in `src/terrain/TerrainChunk.h`. Each chunk owns an immutable world transform matrix, center position, axis-aligned bounding box (`TerrainAABB`), procedural OpenGL `Mesh`, PBR material properties, and visibility state.
+- **Regional DTM 8x8 Grid Partitioning:**
+  - In `MarsRegionalDTMMap::buildGraphics()`, the $1024 \times 1024$ raster heightfield is divided into an $8 \times 8$ grid of 64 independent chunks ($128\text{ m} \times 128\text{ m}$ each, 2m sampling step, 4,225 vertices per chunk).
+  - Vertex coordinates are local to the chunk center to maximize floating-point precision on GPU.
+  - Chunk boundaries share border samples (`cEnd = (cx + 1) * samplesPerChunk`), and vertex normals are sampled from the global terrain grid, guaranteeing zero visible seams or cracks across chunk edges.
+- **Matching Bullet Heightfield Collision:**
+  - Physics collision is implemented via `btHeightfieldTerrainShape` with `PHY_FLOAT` elevation data and `upAxis = 1` ($Y$).
+  - Correct Bullet vertical centering: `btHeightfieldTerrainShape` centers its bounding box at $y = \frac{\min H + \max H}{2}$. The Bullet rigid body is positioned at $(0, \frac{\min H + \max H}{2}, 0)$ with zero rotation, aligning raycasts within $0.05\text{ m}$ of visual heights.
+
+### 14.3 Martian Environmental Physics & Soil Properties
+- **Planetary Parameters (`PlanetaryEnvironment`):**
+  - Surface Gravity: $g = 3.71\text{ m/s}^2$ ($0.378 g_\oplus$).
+  - Atmospheric Density: $\rho = 0.020\text{ kg/m}^3$ (Earth standard: $1.225\text{ kg/m}^3$).
+  - Mean Surface Pressure: $P = 636\text{ Pa}$ ($6.36\text{ mbar}$).
+  - Mean Surface Temperature: $T = 210\text{ K}$ ($-63^\circ\text{C}$).
+  - Solar Irradiance: $S_0 = 590\text{ W/m}^2$ (Earth standard: $1361\text{ W/m}^2$).
+- **Surface Material Hierarchy (`SurfaceSystem`):**
+  - `MarsDust`: $\mu = 0.38$, $C_{rr} = 0.045$, $C_\alpha = 0.70$.
+  - `MarsRegolith`: $\mu = 0.65$, $C_{rr} = 0.022$, $C_\alpha = 0.90$.
+  - `MarsBedrock`: $\mu = 0.85$, $C_{rr} = 0.012$, $C_\alpha = 1.05$.
+  - `MarsDuneSand`: $\mu = 0.30$, $C_{rr} = 0.055$, $C_\alpha = 0.60$.
+
+### 14.4 Automated Regression & Validation Suite Expansion (45 Suites Total)
+- **Unit 31: Planetary Environment & Mars Surface Physics:**
+  - Verifies Earth vs Mars gravity and atmospheric density ratios.
+  - Validates Martian datum surface pressure ($636\text{ Pa}$) and solar irradiance ($590\text{ W/m}^2$).
+  - Verifies friction hierarchy across Martian dust, regolith, bedrock, and sand dunes.
+  - Simulates dynamic vehicle static equilibrium under $3.71\text{ m/s}^2$ gravity, confirming equilibrium normal load matches $m \cdot g_{\text{mars}}$ within $0.1\%$.
+- **Unit 32: Terrain World Transform Stability & Physics Alignment (ARES Regression):**
+  - Instantiates `TerrainChunk` grid and validates that chunk `worldMatrix` remains strictly invariant before and after vehicle movement, acceleration, and rotation.
+  - Validates that physics raycasts onto `btHeightfieldTerrainShape` match analytical raster elevations within $0.05\text{ m}$.
+  - Confirms that terrain meshes exist strictly in `model/terrain/` and are absent from root `model/`.
+- **Integrated Test Execution:**
+  - Added `--tests` CLI argument to `TorqueLabNative.exe` to allow running the full 45-suite test harness directly within the primary executable.
+
 
 

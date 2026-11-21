@@ -600,4 +600,32 @@ VehicleCollisionDiagnostics PhysicsWorld::getCollisionDiagnostics(bool wireframe
     return diag;
 }
 
+PhysicsWorld::RaycastHit PhysicsWorld::raycastWorld(const Vec3& from, const Vec3& to) const {
+    RaycastHit result{};
+    const btVector3 btFrom(static_cast<btScalar>(from.x), static_cast<btScalar>(from.y), static_cast<btScalar>(from.z));
+    const btVector3 btTo(static_cast<btScalar>(to.x), static_cast<btScalar>(to.y), static_cast<btScalar>(to.z));
+
+    btCollisionWorld::ClosestRayResultCallback callback(btFrom, btTo);
+    m_world->rayTest(btFrom, btTo, callback);
+
+    if (callback.hasHit()) {
+        result.hasHit = true;
+        result.pointWorld = Vec3{
+            static_cast<double>(callback.m_hitPointWorld.x()),
+            static_cast<double>(callback.m_hitPointWorld.y()),
+            static_cast<double>(callback.m_hitPointWorld.z())
+        };
+        result.normalWorld = Vec3{
+            static_cast<double>(callback.m_hitNormalWorld.x()),
+            static_cast<double>(callback.m_hitNormalWorld.y()),
+            static_cast<double>(callback.m_hitNormalWorld.z())
+        };
+        result.distance = vec3Length(vec3Sub(result.pointWorld, from));
+        if (callback.m_collisionObject) {
+            result.colliderHandle = callback.m_collisionObject->getUserIndex();
+        }
+    }
+    return result;
+}
+
 } // namespace torquelab

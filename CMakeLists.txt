@@ -184,8 +184,27 @@ target_include_directories(TorqueLabNative PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
 
+# -----------------------------------------------------------------------------
+# 6a. Validation Test Library
+# -----------------------------------------------------------------------------
+add_library(TorqueLabTestsLib STATIC
+    tests/native_validation_tests.cpp
+    src/input/ControllerConfig.cpp
+    src/input/VibrationManager.cpp
+)
+target_compile_definitions(TorqueLabTestsLib PUBLIC NO_STANDALONE_TEST_MAIN)
+target_include_directories(TorqueLabTestsLib PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+)
+target_link_libraries(TorqueLabTestsLib PUBLIC
+    TorqueLabPhysics
+    glfw
+)
+
 target_link_libraries(TorqueLabNative PRIVATE
     TorqueLabPhysics
+    TorqueLabTestsLib
     glad
     glfw
     imgui_lib
@@ -230,18 +249,16 @@ add_custom_command(TARGET TorqueLabNative POST_BUILD
 enable_testing()
 
 add_executable(TorqueLabNativeTests
-    tests/native_validation_tests.cpp
-    src/input/ControllerConfig.cpp
-    src/input/VibrationManager.cpp
+    tests/test_main.cpp
 )
 
 target_include_directories(TorqueLabNativeTests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
 )
 
 target_link_libraries(TorqueLabNativeTests PRIVATE
-    TorqueLabPhysics
-    glfw
+    TorqueLabTestsLib
 )
 
 add_test(NAME TorqueLabNativeValidationSuite COMMAND TorqueLabNativeTests)

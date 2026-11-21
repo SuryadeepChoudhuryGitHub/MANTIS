@@ -14,7 +14,8 @@
       "architecture": "x64",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
-        "CMAKE_POLICY_VERSION_MINIMUM": "3.5"
+        "CMAKE_POLICY_VERSION_MINIMUM": "3.5",
+        "FETCHCONTENT_FULLY_DISCONNECTED": "ON"
       }
     },
     {
@@ -22,10 +23,11 @@
       "displayName": "Windows x64 (MinGW-w64 UCRT64 Makefiles)",
       "description": "Configure with MSYS2 UCRT64 GCC and MinGW Makefiles",
       "generator": "MinGW Makefiles",
-      "binaryDir": "${sourceDir}/build-mingw",
+      "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_POLICY_VERSION_MINIMUM": "3.5"
+        "CMAKE_POLICY_VERSION_MINIMUM": "3.5",
+        "FETCHCONTENT_FULLY_DISCONNECTED": "ON"
       }
     }
   ],

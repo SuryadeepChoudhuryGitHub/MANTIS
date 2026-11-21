@@ -1,5 +1,29 @@
-cmake --build build --config Release --target TorqueLabNative TorqueLabNativeTests
+# =============================================================================
+# PROJECT ARES — Canonical Build & Execution Commands (Single 'build/' Directory)
+# =============================================================================
 
+# --- 1. MinGW-w64 (GCC 16 / UCRT64) Workflow ---
+# Configure in build/
+cmake --preset windows-mingw
+
+# Build both executable and tests
+cmake --build build --target TorqueLabNative TorqueLabNativeTests -j 6
+
+# Run 45-suite automated verification tests
+.\build\TorqueLabNativeTests.exe
+
+# Run interactive simulation or headless smoke test
+.\build\TorqueLabNative.exe
+.\build\TorqueLabNative.exe --smoke-test
+.\build\TorqueLabNative.exe --diag
+
+# --- 2. Visual Studio 2026 / MSVC Workflow ---
+# Configure in build/
+cmake --preset windows-msvc
+
+# Build Release targets
+cmake --build build --config Release --target TorqueLabNative TorqueLabNativeTests -j 6
+
+# Run from build/Release/
 .\build\Release\TorqueLabNativeTests.exe
-
-.\build\Release\TorqueLabNative.exe --smoke-test
+.\build\Release\TorqueLabNative.exe

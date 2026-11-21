@@ -16,6 +16,7 @@
 #include "renderer/Shader.h"
 #include "renderer/ShadowMapFBO.h"
 #include "renderer/Texture2D.h"
+#include "terrain/TerrainChunk.h"
 
 namespace torquelab {
 
@@ -61,6 +62,9 @@ public:
 
     void clearItems();
     void addRenderableItem(RenderableTrackItem item);
+    void clearTerrainChunks();
+    void addTerrainChunk(TerrainChunk chunk);
+    const std::vector<TerrainChunk>& getTerrainChunks() const { return m_chunks; }
     void buildEnvironmentTerrain(Color3 groundColor = Color3::fromHex(0x22462b));
     void rebuildProvingGround(const std::vector<TrackBoxElement>& elements);
     const MaterialProps& getSurfaceMaterial(SurfaceType type) const;
@@ -73,6 +77,7 @@ private:
     std::array<Texture2D, 10> m_surfaceTextures;
     std::array<MaterialProps, 10> m_surfaceMaterials;
     std::vector<RenderableTrackItem> m_items;
+    std::vector<TerrainChunk> m_chunks;
 
     GraphicsQuality m_quality{GraphicsQuality::Maximum};
     Vec3 m_sunDirection{vec3Normalize(Vec3{45.0, 75.0, 35.0})};
