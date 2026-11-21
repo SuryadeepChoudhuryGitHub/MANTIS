@@ -1,0 +1,82 @@
+#pragma once
+/**
+ * OpenGL 3.3 Core Proving Ground Track & Environment Renderer.
+ *
+ * Renders all physical track elements from PhysicsWorld::trackElements with
+ * procedural 256x256 textures, reference lane markings, distance posts,
+ * North Handling Circle ring, and dynamic directional sun shadow mapping.
+ */
+
+#include <array>
+#include <vector>
+#include "physics/Math3D.h"
+#include "physics/PhysicsWorld.h"
+#include "physics/SurfaceSystem.h"
+#include "renderer/Mesh.h"
+#include "renderer/Shader.h"
+#include "renderer/ShadowMapFBO.h"
+#include "renderer/Texture2D.h"
+
+namespace torquelab {
+
+enum class GraphicsQuality : int {
+    Low = 0,
+    Medium = 1,
+    High = 2,
+    Maximum = 3
+};
+
+inline const char* getGraphicsQualityName(GraphicsQuality q) {
+    switch (q) {
+        case GraphicsQuality::Low:     return "Low";
+        case GraphicsQuality::Medium:  return "Medium";
+        case GraphicsQuality::High:    return "High";
+        case GraphicsQuality::Maximum: return "Maximum";
+    }
+    return "Maximum";
+}
+
+class TrackRendererGL {
+public:
+    TrackRendererGL() = default;
+
+    void init(const std::vector<TrackBoxElement>& trackElements);
+    void updateSunTarget(const Vec3& vehiclePos);
+    void setQuality(GraphicsQuality quality, ShadowMapFBO& shadowFBO);
+    GraphicsQuality getQuality() const { return m_quality; }
+
+    Mat4 getLightSpaceMatrix() const { return m_lightSpaceMatrix; }
+    Vec3 getSunDirection() const { return m_sunDirection; }
+    bool areShadowsEnabled() const { return m_quality != GraphicsQuality::Low; }
+    float getShadowTexelSize() const;
+
+    void renderShadowPass(Shader& depthShader) const;
+    void renderMainPass(Shader& mainShader) const;
+
+    struct RenderableTrackItem {
+        Mesh mesh;
+        Mat4 modelMatrix;
+        MaterialProps material;
+    };
+
+    void clearItems();
+    void addRenderableItem(RenderableTrackItem item);
+    void buildEnvironmentTerrain(Color3 groundColor = Color3::fromHex(0x22462b));
+    void rebuildProvingGround(const std::vector<TrackBoxElement>& elements);
+    const MaterialProps& getSurfaceMaterial(SurfaceType type) const;
+
+private:
+    void createProceduralSurfaceMaterials();
+    void buildTrackMeshes(const std::vector<TrackBoxElement>& elements);
+    void buildReferenceMarkers();
+
+    std::array<Texture2D, 10> m_surfaceTextures;
+    std::array<MaterialProps, 10> m_surfaceMaterials;
+    std::vector<RenderableTrackItem> m_items;
+
+    GraphicsQuality m_quality{GraphicsQuality::Maximum};
+    Vec3 m_sunDirection{vec3Normalize(Vec3{45.0, 75.0, 35.0})};
+    Mat4 m_lightSpaceMatrix{Mat4::identity()};
+};
+
+} // namespace torquelab

@@ -1,0 +1,59 @@
+{
+  "dataset_name": "mars_jezero_alpha",
+  "source_file": "mars_terrain2.tif",
+  "georeferencing": {
+    "crs": "Equirectangular Mars 2000 Sphere IAU",
+    "datum_radius_meters": 3396190.0,
+    "projection": "Equirectangular",
+    "horizontal_unit": "meters",
+    "vertical_unit": "meters",
+    "vertical_datum": "MOLA reference aeroid",
+    "pixel_scale_meters": [
+      1.0,
+      1.0
+    ],
+    "tile_origin_projected_xy": [
+      4587554.0,
+      1096386.0
+    ],
+    "tile_center_projected_xy": [
+      4588066.0,
+      1095874.0
+    ]
+  },
+  "grid": {
+    "cols": 1024,
+    "rows": 1024,
+    "physical_width_meters": 1024.0,
+    "physical_depth_meters": 1024.0,
+    "total_vertices": 1048576,
+    "total_triangles": 2093058
+  },
+  "elevation_stats": {
+    "mola_elevation_min_meters": -2464.39599609375,
+    "mola_elevation_max_meters": -2422.001220703125,
+    "mola_elevation_mean_meters": -2442.96875,
+    "mola_elevation_relief_meters": 42.394775390625,
+    "local_reference_elevation_meters": -2442.96875,
+    "local_elevation_min_meters": -21.42724609375,
+    "local_elevation_max_meters": 20.967529296875,
+    "nodata_value": -3.4028226550889045e+38
+  },
+  "simulation": {
+    "coordinate_convention": "+X Left, +Y Up, +Z Forward",
+    "primary_spawn_position": [
+      0.0,
+      6.72568359375,
+      0.0
+    ],
+    "primary_spawn_yaw_deg": 0.0,
+    "surface_type": "MarsRegolith",
+    "provisional_friction_mu": 0.65,
+    "gravity_m_s2": 3.71,
+    "air_density_kg_m3": 0.02
+  },
+  "files": {
+    "binary_heights": "mars_jezero_alpha.bin",
+    "normal_map": "mars_jezero_alpha_normal.png"
+  }
+}
