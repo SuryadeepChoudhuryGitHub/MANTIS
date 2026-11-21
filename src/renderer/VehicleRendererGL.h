@@ -176,6 +176,16 @@ private:
     Mat4 m_importedChassisWorldMatrix;
     std::array<std::vector<Mat4>, 6> m_importedWheelPartMatrices;
 
+    // Rover Rocker-Bogie kinematic linkage transforms
+    Mat4 m_roverDiffBarWorldMatrix{Mat4::identity()};
+    Mat4 m_roverDiffLinkLWorldMatrix{Mat4::identity()};
+    Mat4 m_roverDiffLinkRWorldMatrix{Mat4::identity()};
+    Mat4 m_roverRockerLWorldMatrix{Mat4::identity()};
+    Mat4 m_roverRockerRWorldMatrix{Mat4::identity()};
+    Mat4 m_roverBogieLWorldMatrix{Mat4::identity()};
+    Mat4 m_roverBogieRWorldMatrix{Mat4::identity()};
+    std::array<Mat4, 4> m_roverKnuckleWorldMatrices{Mat4::identity(), Mat4::identity(), Mat4::identity(), Mat4::identity()};
+
     bool m_isBraking{false};
     bool m_isReverse{false};
     Vec3 m_vehiclePos{0.0, 0.0, 0.0};

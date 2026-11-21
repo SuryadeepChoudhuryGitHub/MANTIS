@@ -641,7 +641,47 @@ Our immediate milestone is establishing the functional Mars surface environment:
 
 ---
 
-## 16. Complete Rendering Repair, Perseverance Articulation, Rocker-Bogie Physics & Multi-Resolution Terrain
+## 17. Perseverance Rover Mobility & Mechanical Articulation Refinement
+
+### 17.1 glTF Node Hierarchy & 11-Part Suspension Mesh Partitioning
+- **Node Hierarchy Breakdown (`model/PerseveranceRover.glb`):**
+  - **Node 40 (`Wheels_objs`):** 68,016 triangles comprising all 6 rover wheels ($R = 0.26267\text{ m}$, wheel width $0.3356\text{ m}$).
+  - **Node 41 (`suspension`):** 23,324 triangles comprising the entire rocker-bogie mechanical linkage and steering knuckles.
+  - **Node 42 (`Chassis_obj`):** 44,798 triangles comprising the rover central avionics warm electronics box (WEB), top deck, and science payloads.
+- **Topological & Spatial Mesh Partitioning (`ModelLoaderGLB.cpp`):**
+  - Previously, Node 41 was unclassified and grouped entirely into static chassis parts, freezing the suspension geometry.
+  - Evaluated in local node coordinate space (prior to root node transformation $[0, 0.710975, -0.034999]$), partitioned all 23,324 triangles into 11 semantic kinematic roles with exact bilateral symmetry:
+    1. `Rover_DiffBar` (3,414 triangles): Differential pivot bar on top chassis deck ($|x| < 0.65\text{ m}, y > 0.38\text{ m}$).
+    2. `Rover_DiffLink_L` / `Rover_DiffLink_R` (252 triangles each): Drop tie-rod links connecting differential bar to main rockers.
+    3. `Rover_Rocker_L` / `Rover_Rocker_R` (4,972 triangles each): Main longitudinal rocker arms spanning from front wheel hub mount to rear bogie pivot trunnion ($y \in [-0.25, 0.38]\text{ m}, z \in [-0.55, 1.25]\text{ m}$).
+    4. `Rover_Bogie_L` / `Rover_Bogie_R` (2,050 triangles each): Secondary rear bogie arms spanning from bogie pivot trunnion to mid and rear wheel hub mounts ($z < -0.45\text{ m}, y < 0.05\text{ m}$).
+    5. `Rover_Knuckle_FL` / `Rover_Knuckle_FR` / `Rover_Knuckle_RL` / `Rover_Knuckle_RR` (1,843 triangles each): Steerable kingpin spindle knuckles on 4 corner wheel stations.
+
+### 17.2 Sub-Millimeter NASA CAD Kinematic Hardpoints & Wheel Alignment
+- **Root-Cause Wheel Detachment Fix:** In `ModelLoaderGLB.cpp`, the wheel pivot derivation loop was bounded at `i < 4`. Wheels `ML` (index 4) and `MR` (index 5) were never subtracted by `truePivot`, causing them to inherit their local bind coordinates twice and float outward by over 1.3 metres. Expanded the loop to `i < 6`, restoring exact wheel centering.
+- **False-Positive Elimination:** Filtered out the `rimfax` instrument substring from wheel rim matching, preventing non-wheel geometry from corrupting wheel radius or bounding extents.
+- **Precision Kinematic Pivot trunnions (`RockerBogieSuspension.h/cpp`):**
+  - Rocker trunnion pivots: $P_L = (+0.806, +0.190, +0.249)\text{ m}$, $P_R = (-0.806, +0.190, +0.249)\text{ m}$.
+  - Bogie trunnion pivots: $B_L = (+0.906, -0.047, -0.505)\text{ m}$, $B_R = (-0.906, -0.047, -0.505)\text{ m}$.
+  - Differential bar trunnion: $D_0 = (0.000, +0.457, -0.114)\text{ m}$.
+  - Differential link joints: $T_{L,\text{bar}} = (+0.540, +0.457, -0.114)\text{ m}$, $T_{L,\text{rocker}} = (+0.690, +0.220, -0.114)\text{ m}$.
+  - Rest pose wheel hubs match bind coordinates with zero offset.
+
+### 17.3 Independent 6-Wheel Spin & Decoupled Knuckle Steering
+- **Independent Sub-Stepped Rotation:** All 6 wheels spin independently around their spindle axis based on physical angular velocity $\omega_i = v_i / r_i$, accounting for slip, drive torque, and terrain contact. Forward and reverse drive directions rotate wheels in physically authentic directions.
+- **Decoupled 4-Corner Steering:** Steering angle $\delta_i$ (Ackermann corner steering) rotates the knuckle assembly around the vertical kingpin axis, while wheel rotation $\theta_{\text{rot},i}$ spins the wheel around its spindle axis:
+  $$M_{\text{wheel},i} = M_{\text{mount},i} \cdot R_y(\delta_i) \cdot R_x(\theta_{\text{rot},i})$$
+- **Rigid Middle Axle:** Middle wheels `ML` and `MR` remain strictly non-steered ($\delta = 0.0\text{ rad}$) while spinning independently.
+
+### 17.4 Full Articulated Rendering & Diagnostic Gizmo
+- **Forward Kinematic Hierarchical Rendering (`VehicleRendererGL.cpp`):**
+  - Main pass and shadow caster pass dynamically evaluate transformed local matrices for all 11 suspension components.
+  - Rocker arms pitch around $P_{L/R}$; bogie arms pitch relative to rocker around $B_{L/R}$; differential bar pitches around $D_0$; knuckles steer around corner kingpins.
+- **Real-Time 3D Articulation Skeleton Gizmo (`DebugOverlayGL.cpp`):**
+  - Diagnostic visual overlay rendering rocker links, bogie triangles, differential bar, tie rods, and kingpin steering axes.
+- **50 / 50 Test Suites Passing:**
+  - Automated test suite `Unit 37` verifies mechanical articulation, 6-wheel rotation, and kinematic joint closure under Martian terrain contact. All 50 test suites pass with 0 failed assertions.
+
 
 ### 16.1 Perseverance Invisibility & Draco glTF Decompression
 - **Draco Compression Decoding:** All 252 primitives across 24 meshes in `model/PerseveranceRover.glb` were encoded using the `KHR_draco_mesh_compression` extension. Without a Draco decoder, `cgltf` skipped buffer attribute extraction, yielding 0 vertices and making the rover invisible. Integrated `draco::Decoder` in `ModelLoaderGLB.cpp`, successfully decompressing all 138,783 vertices and 199,521 triangles in memory.

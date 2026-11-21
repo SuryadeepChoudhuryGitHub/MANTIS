@@ -283,6 +283,59 @@ void VehicleRendererGL::syncWithVehicle(const VehicleDynamics& vehicle, double a
         Mat4::fromTranslation((m_activeModel && m_activeModel->loadedSuccessfully) ? m_activeModel->chassisCenterOffset : Vec3{0, 0, 0})
     );
 
+    // Compute Rover Rocker-Bogie articulated suspension matrices
+    if (m_activeModel && m_activeModel->loadedSuccessfully && m_activeModel->isRover) {
+        const RockerBogieState& rb = vehicle.rockerBogie.getState();
+        const Vec3& P_L = vehicle.rockerBogie.getLeftRockerPivotLocal();
+        const Vec3& P_R = vehicle.rockerBogie.getRightRockerPivotLocal();
+        const Vec3& B_L = vehicle.rockerBogie.getLeftBogiePivotLocal();
+        const Vec3& B_R = vehicle.rockerBogie.getRightBogiePivotLocal();
+        const Vec3& D_0 = vehicle.rockerBogie.getDifferentialPivotLocal();
+
+        // 1. Top Differential Crossbar: pivots at D_0 on top deck
+        const Mat4 diffBase = Mat4::fromTRS(rb.differentialPivotWorld, rb.differentialOrientationWorld);
+        m_roverDiffBarWorldMatrix = Mat4::multiply(diffBase, Mat4::fromTranslation(vec3Scale(D_0, -1.0)));
+
+        // 2. Main Rocker Arms (Left and Right)
+        const Mat4 rockerLBase = Mat4::fromTRS(rb.leftRockerPivotWorld, rb.leftRockerOrientationWorld);
+        const Mat4 rockerRBase = Mat4::fromTRS(rb.rightRockerPivotWorld, rb.rightRockerOrientationWorld);
+        m_roverRockerLWorldMatrix = Mat4::multiply(rockerLBase, Mat4::fromTranslation(vec3Scale(P_L, -1.0)));
+        m_roverRockerRWorldMatrix = Mat4::multiply(rockerRBase, Mat4::fromTranslation(vec3Scale(P_R, -1.0)));
+
+        // 3. Differential drop links / tie rods (rotate with the rockers)
+        m_roverDiffLinkLWorldMatrix = m_roverRockerLWorldMatrix;
+        m_roverDiffLinkRWorldMatrix = m_roverRockerRWorldMatrix;
+
+        // 4. Bogie Arms (Left and Right)
+        const Mat4 bogieLBase = Mat4::fromTRS(rb.leftBogiePivotWorld, rb.leftBogieOrientationWorld);
+        const Mat4 bogieRBase = Mat4::fromTRS(rb.rightBogiePivotWorld, rb.rightBogieOrientationWorld);
+        m_roverBogieLWorldMatrix = Mat4::multiply(bogieLBase, Mat4::fromTranslation(vec3Scale(B_L, -1.0)));
+        m_roverBogieRWorldMatrix = Mat4::multiply(bogieRBase, Mat4::fromTranslation(vec3Scale(B_R, -1.0)));
+
+        // 5. Four Corner Steering Knuckles (FL, FR, RL, RR)
+        const Vec3 W0{ 1.062, 0.000,  1.130};
+        const Vec3 W1{-1.062, 0.000,  1.130};
+        const Vec3 W2{ 1.062, 0.000, -1.130};
+        const Vec3 W3{-1.062, 0.000, -1.130};
+
+        m_roverKnuckleWorldMatrices[0] = Mat4::multiply(
+            Mat4::fromTRS(rb.wheelHubsWorld[0], rb.knuckleOrientationsWorld[0]),
+            Mat4::fromTranslation(vec3Scale(W0, -1.0))
+        );
+        m_roverKnuckleWorldMatrices[1] = Mat4::multiply(
+            Mat4::fromTRS(rb.wheelHubsWorld[1], rb.knuckleOrientationsWorld[1]),
+            Mat4::fromTranslation(vec3Scale(W1, -1.0))
+        );
+        m_roverKnuckleWorldMatrices[2] = Mat4::multiply(
+            Mat4::fromTRS(rb.wheelHubsWorld[2], rb.knuckleOrientationsWorld[2]),
+            Mat4::fromTranslation(vec3Scale(W2, -1.0))
+        );
+        m_roverKnuckleWorldMatrices[3] = Mat4::multiply(
+            Mat4::fromTRS(rb.wheelHubsWorld[3], rb.knuckleOrientationsWorld[3]),
+            Mat4::fromTranslation(vec3Scale(W3, -1.0))
+        );
+    }
+
     const float rotorRadius = m_wheelRadius * 0.50f;
     const int numWheels = (vehicle.config.numWheels >= 6 || (m_activeModel && m_activeModel->wheelParts[4].size() > 0)) ? 6 : 4;
 
@@ -330,9 +383,17 @@ void VehicleRendererGL::syncWithVehicle(const VehicleDynamics& vehicle, double a
             }
 
             // Wheel steered + spin orientation
-            const Quat spinQuat = quatFromAxisAngle(Vec3{1.0, 0.0, 0.0}, ws.rotationAngle);
-            const Quat wheelWorldQuat = quatMultiply(knuckleQuat, spinQuat);
-            const Mat4 wheelBaseWorld = Mat4::fromTRS(wPos, wheelWorldQuat);
+            Vec3 wheelCenterPos = wPos;
+            Quat wheelWorldQuat;
+            if (m_activeModel->isRover) {
+                const auto& rb = vehicle.rockerBogie.getState();
+                wheelCenterPos = rb.wheelHubsWorld[static_cast<size_t>(i)];
+                wheelWorldQuat = rb.wheelOrientationsWorld[static_cast<size_t>(i)];
+            } else {
+                const Quat spinQuat = quatFromAxisAngle(Vec3{1.0, 0.0, 0.0}, ws.rotationAngle);
+                wheelWorldQuat = quatMultiply(knuckleQuat, spinQuat);
+            }
+            const Mat4 wheelBaseWorld = Mat4::fromTRS(wheelCenterPos, wheelWorldQuat);
 
             for (size_t k = 0; k < parts.size(); ++k) {
                 outMats[k] = Mat4::multiply(wheelBaseWorld, parts[k].subPartLocalMatrix);
@@ -413,6 +474,28 @@ void VehicleRendererGL::renderShadowPass(Shader& depthShader) const {
             part.mesh.draw();
         }
 
+        // Rover Rocker-Bogie suspension shadow pass
+        if (m_activeModel->isRover) {
+            auto drawPartsShadow = [&](const std::vector<LoadedModelPart>& parts, const Mat4& mat) {
+                for (const auto& part : parts) {
+                    if (!part.material.castShadows || part.isTransparent) continue;
+                    depthShader.setMat4("uModel", mat);
+                    part.mesh.draw();
+                }
+            };
+
+            drawPartsShadow(m_activeModel->roverDiffBarParts, m_roverDiffBarWorldMatrix);
+            drawPartsShadow(m_activeModel->roverDiffLinkPartsLeft, m_roverDiffLinkLWorldMatrix);
+            drawPartsShadow(m_activeModel->roverDiffLinkPartsRight, m_roverDiffLinkRWorldMatrix);
+            drawPartsShadow(m_activeModel->roverRockerPartsLeft, m_roverRockerLWorldMatrix);
+            drawPartsShadow(m_activeModel->roverRockerPartsRight, m_roverRockerRWorldMatrix);
+            drawPartsShadow(m_activeModel->roverBogiePartsLeft, m_roverBogieLWorldMatrix);
+            drawPartsShadow(m_activeModel->roverBogiePartsRight, m_roverBogieRWorldMatrix);
+            for (int k = 0; k < 4; ++k) {
+                drawPartsShadow(m_activeModel->roverKnuckleParts[k], m_roverKnuckleWorldMatrices[k]);
+            }
+        }
+
         const int numWheels = (m_activeModel->wheelParts[4].size() > 0) ? 6 : 4;
         for (int i = 0; i < numWheels; ++i) {
             const auto& parts = m_activeModel->wheelParts[static_cast<size_t>(i)];
@@ -475,6 +558,35 @@ void VehicleRendererGL::renderMainPass(Shader& mainShader, const Vec3& cameraPos
                 glEnable(GL_CULL_FACE);
             } else {
                 part.mesh.draw();
+            }
+        }
+
+        // 1b. Rover Articulated Rocker-Bogie Suspension Linkages & Steering Knuckles
+        if (m_activeModel->isRover) {
+            auto drawPartsMain = [&](const std::vector<LoadedModelPart>& parts, const Mat4& mat) {
+                for (const auto& part : parts) {
+                    if (part.isTransparent) continue;
+                    mainShader.applyMaterial(part.material);
+                    mainShader.setMat4("uModel", mat);
+                    if (part.material.doubleSided) {
+                        glDisable(GL_CULL_FACE);
+                        part.mesh.draw();
+                        glEnable(GL_CULL_FACE);
+                    } else {
+                        part.mesh.draw();
+                    }
+                }
+            };
+
+            drawPartsMain(m_activeModel->roverDiffBarParts, m_roverDiffBarWorldMatrix);
+            drawPartsMain(m_activeModel->roverDiffLinkPartsLeft, m_roverDiffLinkLWorldMatrix);
+            drawPartsMain(m_activeModel->roverDiffLinkPartsRight, m_roverDiffLinkRWorldMatrix);
+            drawPartsMain(m_activeModel->roverRockerPartsLeft, m_roverRockerLWorldMatrix);
+            drawPartsMain(m_activeModel->roverRockerPartsRight, m_roverRockerRWorldMatrix);
+            drawPartsMain(m_activeModel->roverBogiePartsLeft, m_roverBogieLWorldMatrix);
+            drawPartsMain(m_activeModel->roverBogiePartsRight, m_roverBogieRWorldMatrix);
+            for (int k = 0; k < 4; ++k) {
+                drawPartsMain(m_activeModel->roverKnuckleParts[k], m_roverKnuckleWorldMatrices[k]);
             }
         }
 

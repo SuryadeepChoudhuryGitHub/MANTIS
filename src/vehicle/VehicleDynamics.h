@@ -32,6 +32,8 @@
 
 namespace torquelab {
 
+class TerrainManager;
+
 struct VehicleControlInputs {
     double throttle{0.0};    // [0..1]
     double brake{0.0};       // [0..1]
@@ -148,6 +150,9 @@ public:
         return (i >= 0 && i < 6) ? m_wheelCylinderShapes[static_cast<size_t>(i)].get() : nullptr;
     }
 
+    void setTerrainManager(const TerrainManager* tm) { m_terrainManager = tm; }
+    const TerrainManager* getTerrainManager() const { return m_terrainManager; }
+
     VehicleConfig config;
     VehicleBody body;
     std::array<WheelState, 6> wheels;
@@ -164,6 +169,7 @@ private:
 
     btDiscreteDynamicsWorld* m_world{nullptr};
     SurfaceSystem* m_surfaceSystem{nullptr};
+    const TerrainManager* m_terrainManager{nullptr};
     Vec3 m_initialSpawnPos{0.0, 0.55, 0.0};
     Quat m_initialSpawnRot{0.0, 0.0, 0.0, 1.0};
 

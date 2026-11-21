@@ -55,13 +55,42 @@ public:
     bool switchMap(
         const std::string& mapId,
         PhysicsWorld& world,
-        TrackRendererGL& trackRenderer,
-        SkyRendererGL& skyRenderer
+        TrackRendererGL* trackRenderer = nullptr,
+        SkyRendererGL* skyRenderer = nullptr
     );
+
+    /**
+     * Authoritative elevation query at world position (worldX, worldZ) from the active map.
+     */
+    bool getElevationAt(double worldX, double worldZ, double& outElevation, Vec3& outNormal) const;
+
+    /**
+     * Authoritative surface material query at world position (worldX, worldZ) from the active map.
+     */
+    SurfaceType getSurfaceMaterialAt(double worldX, double worldZ) const;
+
+    /**
+     * Bounds check at world position (worldX, worldZ) against active map playable area.
+     */
+    bool isPositionInsidePlayableTerrain(double worldX, double worldZ) const;
+
+    /**
+     * Authoritative terrain contact query at world position from the active map.
+     */
+    TerrainContactInfo getTerrainContactAt(const Vec3& worldPos, double probeRadius = 0.0) const;
+
+    /**
+     * Authoritative terrain ray query along rayOrigin + t * rayDir from the active map.
+     */
+    bool queryRayContact(const Vec3& rayOrigin, const Vec3& rayDir, double maxDistance, TerrainContactInfo& outContact) const;
+
+    void setPhysicsWorld(PhysicsWorld* world) { m_physicsWorld = world; }
+    PhysicsWorld* getPhysicsWorld() const { return m_physicsWorld; }
 
 private:
     std::vector<std::shared_ptr<ITerrainMap>> m_maps;
     size_t m_activeMapIndex{0};
+    PhysicsWorld* m_physicsWorld{nullptr};
 };
 
 } // namespace torquelab

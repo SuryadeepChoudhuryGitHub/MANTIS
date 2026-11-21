@@ -1,0 +1,101 @@
+====================================================================
+ Project ARES — Automated Physics & Autonomous Rover Validation Suite
+====================================================================
+[RUN ] Unit 1: Spring, Damper, Bump-Stop & Anti-Roll Bar Signs
+[PASS] Unit 1: Spring, Damper, Bump-Stop & Anti-Roll Bar Signs
+[RUN ] Unit 2: Right-Handed Coordinate Transforms & Pitch/Roll Extraction
+[PASS] Unit 2: Right-Handed Coordinate Transforms & Pitch/Roll Extraction
+[RUN ] Unit 3: Tire Friction-Circle Limits & Load Sensitivity
+[PASS] Unit 3: Tire Friction-Circle Limits & Load Sensitivity
+[RUN ] Unit 4: Wheel Angular Speed, Slip Ratio & Slip Angle
+[PASS] Unit 4: Wheel Angular Speed, Slip Ratio & Slip Angle
+[RUN ] Unit 5: Drivetrain Torque Curve, Gear Ratios, Rev Limiter & LSD
+[PASS] Unit 5: Drivetrain Torque Curve, Gear Ratios, Rev Limiter & LSD
+[RUN ] Unit 6: Surface Friction Hierarchy Across Materials
+[PASS] Unit 6: Surface Friction Hierarchy Across Materials
+[RUN ] Unit 7: Ackermann Steering Geometry & Speed-Sensitive Limits
+[PASS] Unit 7: Ackermann Steering Geometry & Speed-Sensitive Limits
+[RUN ] Unit 8: Quadratic Aerodynamic Drag & Service/Handbrake Bias
+[PASS] Unit 8: Quadratic Aerodynamic Drag & Service/Handbrake Bias
+[RUN ] Unit 9: Automatic Model-Derived Collision Pipeline & Fallback Hierarchy
+[PASS] Unit 9: Automatic Model-Derived Collision Pipeline & Fallback Hierarchy
+[RUN ] Unit 10: Dynamic Rigid-Body Collision Hull Stability & Contact
+[PASS] Unit 10: Dynamic Rigid-Body Collision Hull Stability & Contact
+[RUN ] Unit 11: Collision Alignment, Continuous Collision Detection & Obstacle Impact
+[PASS] Unit 11: Collision Alignment, Continuous Collision Detection & Obstacle Impact
+[RUN ] Unit 12: Collision Lifecycle, Visualization Independence & Switching Integrity
+  Testing collision lifecycle, visualization independence, and switching integrity...
+[PASS] Unit 12: Collision Lifecycle, Visualization Independence & Switching Integrity
+[RUN ] Unit 13: Forza-Inspired Controller Mapping, Normalization & Settings Pipeline
+[PASS] Unit 13: Forza-Inspired Controller Mapping, Normalization & Settings Pipeline
+[RUN ] Unit 14: Physics-Driven Controller Haptics & RPM Vibration Elimination
+[PASS] Unit 14: Physics-Driven Controller Haptics & RPM Vibration Elimination
+[RUN ] Unit 15: Multi-Vehicle Presets, Dodge Challenger & Muscle Car Tuning
+[PASS] Unit 15: Multi-Vehicle Presets, Dodge Challenger & Muscle Car Tuning
+[RUN ] Unit 16: Volumetric Tyre Obstacle Contact, Circumferential Gripping & Curb Climbing
+[PASS] Unit 16: Volumetric Tyre Obstacle Contact, Circumferential Gripping & Curb Climbing
+[RUN ] Unit 17: Wheel Geometry Derivation, Alignment & Dynamic Collision Object Lifecycle
+[PASS] Unit 17: Wheel Geometry Derivation, Alignment & Dynamic Collision Object Lifecycle
+[RUN ] Unit 18: Stationary Stability, Stiction Holding & Zero-Creep Parking
+[PASS] Unit 18: Stationary Stability, Stiction Holding & Zero-Creep Parking
+[RUN ] Unit 19: Wheel Alignment & Fender Clearance Across All Vehicle Models
+[PASS] Unit 19: Wheel Alignment & Fender Clearance Across All Vehicle Models
+[RUN ] Unit 20: Selectable Wheel Collision Fidelity Modes & Runtime Lifecycle
+[PASS] Unit 20: Selectable Wheel Collision Fidelity Modes & Runtime Lifecycle
+[RUN ] Unit 21: Modular Vehicle Component Architecture (Wheels, Suspension, Steering, Detachable Parts)
+[PASS] Unit 21: Modular Vehicle Component Architecture (Wheels, Suspension, Steering, Detachable Parts)
+[RUN ] Unit 22: Pneumatic Tyre Internal Pressure, Radial Stiffness & Contact Deflection
+[PASS] Unit 22: Pneumatic Tyre Internal Pressure, Radial Stiffness & Contact Deflection
+[RUN ] Unit 23: Multi-Point Distributed Contact Patch & Load Consistency
+[PASS] Unit 23: Multi-Point Distributed Contact Patch & Load Consistency
+[RUN ] Unit 24: Series Suspension & Pneumatic Tyre Compliance Equilibrium
+[PASS] Unit 24: Series Suspension & Pneumatic Tyre Compliance Equilibrium
+[RUN ] Unit 25: Carcass Dynamic Deformation & Self-Aligning Torque
+[PASS] Unit 25: Carcass Dynamic Deformation & Self-Aligning Torque
+[RUN ] Unit 26: Tyre Thermodynamics, Frictional Heating, Wear & Puncture
+[PASS] Unit 26: Tyre Thermodynamics, Frictional Heating, Wear & Puncture
+[RUN ] Unit 27: Strict Rigid Rim Protection & Vertex Shader Boundary
+[PASS] Unit 27: Strict Rigid Rim Protection & Vertex Shader Boundary
+[RUN ] Unit 28: World-Space Tyre Ground Penetration Elimination & Flush Contact Patch
+[PASS] Unit 28: World-Space Tyre Ground Penetration Elimination & Flush Contact Patch
+[RUN ] Unit 29: Hummer H2 Off-Road Physics, AWD Drivetrain & Collision Geometry
+[PASS] Unit 29: Hummer H2 Off-Road Physics, AWD Drivetrain & Collision Geometry
+[RUN ] Unit 30: Automated Vehicle Asset Validation & Universal Model Importer
+[ModelLoaderGLB] Loading vehicle model: D:\# My Folder\My Work\Visual Studio script\C++\ProjectAres\model\PerseveranceRover.glb
+[ModelLoaderGLB] Success! Loaded 536 parts (138783 verts, 199521 tris) from D:\# My Folder\My Work\Visual Studio script\C++\ProjectAres\model\PerseveranceRover.glb
+  Chassis Parts: 242 | Wheel Parts: FL=3, FR=3, RL=3, RR=3
+  Model Axle Bounds: Front Z=+1.095 m, Rear Z=-1.165 m (Wheelbase=2.260 m)
+[ModelLoaderGLB] Asset Validation PASSED for Mars Rover
+[PASS] Unit 30: Automated Vehicle Asset Validation & Universal Model Importer
+[RUN ] Unit 31: Planetary Environment & Mars Surface Physics (ARES Foundation)
+[PASS] Unit 31: Planetary Environment & Mars Surface Physics (ARES Foundation)
+[RUN ] Unit 32: Terrain World Transform Stability & Physics Alignment (ARES Bug Fix)
+[PASS] Unit 32: Terrain World Transform Stability & Physics Alignment (ARES Bug Fix)
+[RUN ] Unit 33: Mars Rover Drivetrain, Low CoM & Planetary Suspension
+Unit 33 Debug: totalFz=3804.94 expected=3802.75 errPct=0.0574671
+[PASS] Unit 33: Mars Rover Drivetrain, Low CoM & Planetary Suspension
+[RUN ] Unit 34: Map Switching Lifecycle & Multi-Terrain Integrity
+[ModelLoaderGLB] Loading vehicle model: D:\# My Folder\My Work\Visual Studio script\C++\ProjectAres\model\terrain\mars_terrain0.glb
+[ModelLoaderGLB] Success! Loaded 7 parts (123606 verts, 232571 tris) from D:\# My Folder\My Work\Visual Studio script\C++\ProjectAres\model\terrain\mars_terrain0.glb
+  Chassis Parts: 7 | Wheel Parts: FL=0, FR=0, RL=0, RR=0
+  Model Axle Bounds: Front Z=+1.130 m, Rear Z=-1.130 m (Wheelbase=2.260 m)
+[PASS] Unit 34: Map Switching Lifecycle & Multi-Terrain Integrity
+[RUN ] Unit 35: 6-Wheel Rocker-Bogie Kinematic Articulation & Differential Coupling
+[PASS] Unit 35: 6-Wheel Rocker-Bogie Kinematic Articulation & Differential Coupling
+[RUN ] Unit 36: Rover Physical Dimensions & NASA Jezero Crater DTM Scale Verification
+[ModelLoaderGLB] Loading vehicle model: D:\# My Folder\My Work\Visual Studio script\C++\ProjectAres\model\PerseveranceRover.glb
+[ModelLoaderGLB] Success! Loaded 536 parts (138783 verts, 199521 tris) from D:\# My Folder\My Work\Visual Studio script\C++\ProjectAres\model\PerseveranceRover.glb
+  Chassis Parts: 242 | Wheel Parts: FL=3, FR=3, RL=3, RR=3
+  Model Axle Bounds: Front Z=+1.095 m, Rear Z=-1.165 m (Wheelbase=2.260 m)
+[ModelLoaderGLB] Asset Validation PASSED for Mars Rover
+[PASS] Unit 36: Rover Physical Dimensions & NASA Jezero Crater DTM Scale Verification
+[RUN ] Unit 37: Perseverance Rover Mechanical Articulation, 6-Wheel Rotation & Kinematic Joint Closure
+[ModelLoaderGLB] Loading vehicle model: D:\# My Folder\My Work\Visual Studio script\C++\ProjectAres\model\PerseveranceRover.glb
+[ModelLoaderGLB] Success! Loaded 536 parts (138783 verts, 199521 tris) from D:\# My Folder\My Work\Visual Studio script\C++\ProjectAres\model\PerseveranceRover.glb
+  Chassis Parts: 242 | Wheel Parts: FL=3, FR=3, RL=3, RR=3
+  Model Axle Bounds: Front Z=+1.095 m, Rear Z=-1.165 m (Wheelbase=2.260 m)
+[ModelLoaderGLB] Asset Validation PASSED for Mars Rover
+[PASS] Unit 37: Perseverance Rover Mechanical Articulation, 6-Wheel Rotation & Kinematic Joint Closure
+[RUN ] Unit 38: Wheel Collision Geometry, Terrain Elevation Mapping & Anti-Sinkage Verification
+[TerrainManager] Switching active map to: Mars Jezero Crater (HiRISE DTM) (mars_jezero_alpha)...
+[MarsRegionalDTMMap] Loaded 1048576 heights. Range: [-21.4272, 20.9675] m.

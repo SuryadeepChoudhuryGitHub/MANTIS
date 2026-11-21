@@ -28,6 +28,7 @@
 namespace torquelab {
 
 class VehicleBody;
+class TerrainManager;
 
 struct RockerBogieState {
     // Linkage pitch angles relative to chassis local frame (radians)
@@ -48,6 +49,15 @@ struct RockerBogieState {
     Vec3 rightRockerPivotWorld{0.0, 0.0, 0.0};
     Vec3 leftBogiePivotWorld{0.0, 0.0, 0.0};
     Vec3 rightBogiePivotWorld{0.0, 0.0, 0.0};
+    Vec3 differentialPivotWorld{0.0, 0.0, 0.0};
+
+    // World-space linkage orientations
+    Quat leftRockerOrientationWorld{0.0, 0.0, 0.0, 1.0};
+    Quat rightRockerOrientationWorld{0.0, 0.0, 0.0, 1.0};
+    Quat leftBogieOrientationWorld{0.0, 0.0, 0.0, 1.0};
+    Quat rightBogieOrientationWorld{0.0, 0.0, 0.0, 1.0};
+    Quat differentialOrientationWorld{0.0, 0.0, 0.0, 1.0};
+    std::array<Quat, 4> knuckleOrientationsWorld{}; // 0=FL, 1=FR, 2=RL, 3=RR
 
     // 6 Wheel hub positions in world space (m)
     // Indexing: 0=FL, 1=FR, 2=RL, 3=RR, 4=ML, 5=MR
@@ -86,33 +96,46 @@ public:
         SurfaceSystem* surfaceSystem,
         std::array<WheelState, 6>& wheels,
         double centerSteeringInput,
-        const std::array<const btCollisionObject*, 6>& wheelObjsToIgnore
+        const std::array<const btCollisionObject*, 6>& wheelObjsToIgnore,
+        const TerrainManager* terrainManager = nullptr
     );
 
     const RockerBogieState& getState() const { return m_state; }
 
-    // Hard-point geometry accessors
+    // Hard-point geometry accessors (chassis local, resting pose)
+    const Vec3& getDifferentialPivotLocal() const { return m_diffPivotLocal; }
     const Vec3& getLeftRockerPivotLocal() const { return m_leftRockerPivotLocal; }
     const Vec3& getRightRockerPivotLocal() const { return m_rightRockerPivotLocal; }
-    const Vec3& getLeftBogiePivotLocal() const { return m_rockerToBogieLocal; }
+    const Vec3& getLeftBogiePivotLocal() const { return m_leftBogiePivotLocal; }
+    const Vec3& getRightBogiePivotLocal() const { return m_rightBogiePivotLocal; }
+    const Vec3& getRockerToFrontLocal() const { return m_rockerToFrontLocal; }
+    const Vec3& getRockerToBogieLocal() const { return m_rockerToBogieLocal; }
+    const Vec3& getBogieToMidLocal() const { return m_bogieToMidLocal; }
+    const Vec3& getBogieToRearLocal() const { return m_bogieToRearLocal; }
 
 private:
     RockerBogieState m_state{};
 
     // Local hardpoint offsets in chassis coordinate frame (m)
     // Chassis Frame: +X = Left, +Y = Up, +Z = Forward
-    Vec3 m_leftRockerPivotLocal{ 1.15, 0.20,  0.05};
-    Vec3 m_rightRockerPivotLocal{-1.15, 0.20,  0.05};
+    // Matched to millimeter precision from NASA CAD geometry
+    Vec3 m_diffPivotLocal{ 0.000, 0.457, -0.114};
+    Vec3 m_leftRockerPivotLocal{  0.806, 0.190,  0.249};
+    Vec3 m_rightRockerPivotLocal{-0.806, 0.190,  0.249};
 
     // Rocker arm vector from rocker pivot to front wheel mount (chassis local)
-    Vec3 m_rockerToFrontLocal{ 0.00, -0.20,  1.08};
+    Vec3 m_rockerToFrontLocal{ 0.256, -0.400,  0.846};
     // Rocker arm vector from rocker pivot to bogie pivot (chassis local)
-    Vec3 m_rockerToBogieLocal{ 0.00, -0.08, -0.58};
+    Vec3 m_rockerToBogieLocal{ 0.100, -0.237, -0.754};
 
-    // Bogie arm vector from bogie pivot to mid wheel mount (bogie local)
-    Vec3 m_bogieToMidLocal{  0.12, -0.12,  0.52};
-    // Bogie arm vector from bogie pivot to rear wheel mount (bogie local)
-    Vec3 m_bogieToRearLocal{ 0.00, -0.12, -0.55};
+    // Bogie pivot local in chassis frame at rest
+    Vec3 m_leftBogiePivotLocal{  0.906, -0.047, -0.505};
+    Vec3 m_rightBogiePivotLocal{-0.906, -0.047, -0.505};
+
+    // Bogie arm vector from bogie pivot to mid wheel mount (bogie local at rest)
+    Vec3 m_bogieToMidLocal{  0.278, -0.163,  0.415};
+    // Bogie arm vector from bogie pivot to rear wheel mount (bogie local at rest)
+    Vec3 m_bogieToRearLocal{ 0.156, -0.163, -0.660};
 };
 
 } // namespace torquelab

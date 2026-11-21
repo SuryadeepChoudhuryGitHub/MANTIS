@@ -100,6 +100,8 @@ bool Application::init(int width, int height, bool visible) {
     m_skyRenderer.init();
     m_skyRenderer.setEnvironment(marsEnv);
     m_terrainManager.init();
+    m_physicsWorld->setTerrainManager(&m_terrainManager);
+    m_terrainManager.setPhysicsWorld(m_physicsWorld.get());
 
     // 3b. Automatic Model-Derived Collision Generation from Imported 3D Geometry
     CollisionPipelineSettings colSettings{};
@@ -122,7 +124,7 @@ bool Application::init(int width, int height, bool visible) {
     }
 
     // Initialize with primary Mars Jezero Crater exploration site
-    m_terrainManager.switchMap("mars_jezero_alpha", *m_physicsWorld, m_trackRenderer, m_skyRenderer);
+    m_terrainManager.switchMap("mars_jezero_alpha", *m_physicsWorld, &m_trackRenderer, &m_skyRenderer);
 
     const float aspect = static_cast<float>(m_fbWidth) / static_cast<float>(std::max(1, m_fbHeight));
     m_cameraController = std::make_unique<CameraControllerGL>(aspect);
@@ -383,7 +385,7 @@ void Application::switchActiveVehicle(const std::string& vehicleId) {
 }
 
 void Application::switchActiveMap(const std::string& mapId) {
-    if (m_terrainManager.switchMap(mapId, *m_physicsWorld, m_trackRenderer, m_skyRenderer)) {
+    if (m_terrainManager.switchMap(mapId, *m_physicsWorld, &m_trackRenderer, &m_skyRenderer)) {
         m_cameraController->snapToVehicle(*m_physicsWorld->vehicle);
         m_vehicleRenderer.syncWithVehicle(*m_physicsWorld->vehicle, 1.0);
         if (m_dashboard) {

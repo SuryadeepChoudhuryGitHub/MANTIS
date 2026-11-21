@@ -48,6 +48,59 @@ public:
         // Will be populated with track elements from PhysicsWorld
         return true;
     }
+
+    bool getElevationAt(double worldX, double worldZ, double& outElevation, Vec3& outNormal) const override {
+        outElevation = 0.0;
+        outNormal = Vec3{0.0, 1.0, 0.0};
+        return isPositionInsidePlayableTerrain(worldX, worldZ);
+    }
+
+    SurfaceType getSurfaceMaterialAt(double worldX, double worldZ) const override {
+        if (worldZ >= 350.0 && worldZ <= 650.0 && std::abs(worldX) <= 6.0) {
+            return SurfaceType::Gravel;
+        }
+        if (worldZ >= 700.0 && worldZ <= 900.0 && std::abs(worldX) <= 6.0) {
+            return SurfaceType::Ice;
+        }
+        if (std::abs(worldX) > 20.0) {
+            return SurfaceType::Grass;
+        }
+        return SurfaceType::DryAsphalt;
+    }
+
+    bool isPositionInsidePlayableTerrain(double worldX, double worldZ) const override {
+        return (worldX >= -300.0 && worldX <= 300.0 && worldZ >= -200.0 && worldZ <= 2600.0);
+    }
+
+    TerrainContactInfo getTerrainContactAt(const Vec3& worldPos, double probeRadius = 0.0) const override {
+        TerrainContactInfo info{};
+        info.isInsidePlayableBounds = isPositionInsidePlayableTerrain(worldPos.x, worldPos.z);
+        info.elevation = 0.0;
+        info.surfaceNormal = Vec3{0.0, 1.0, 0.0};
+        info.contactPointWorld = Vec3{worldPos.x, 0.0, worldPos.z};
+        info.surfaceType = getSurfaceMaterialAt(worldPos.x, worldPos.z);
+        info.penetrationDepth = std::max(0.0, (0.0 + probeRadius) - worldPos.y);
+        info.hasContact = (worldPos.y <= probeRadius + 0.50);
+        info.slopeAngleRad = 0.0;
+        return info;
+    }
+
+    bool queryRayContact(const Vec3& rayOrigin, const Vec3& rayDir, double maxDistance, TerrainContactInfo& outContact) const override {
+        if (std::abs(rayDir.y) < 1e-6) return false;
+        const double t = (0.0 - rayOrigin.y) / rayDir.y;
+        if (t < 0.0 || t > maxDistance) return false;
+        const Vec3 hitPt = vec3Add(rayOrigin, vec3Scale(rayDir, t));
+        if (!isPositionInsidePlayableTerrain(hitPt.x, hitPt.z)) return false;
+        outContact.hasContact = true;
+        outContact.elevation = 0.0;
+        outContact.surfaceNormal = Vec3{0.0, 1.0, 0.0};
+        outContact.contactPointWorld = hitPt;
+        outContact.surfaceType = getSurfaceMaterialAt(hitPt.x, hitPt.z);
+        outContact.penetrationDepth = 0.0;
+        outContact.isInsidePlayableBounds = true;
+        outContact.slopeAngleRad = 0.0;
+        return true;
+    }
 };
 
 // ============================================================================
@@ -115,6 +168,7 @@ public:
             true
         );
 
+        m_physicsWorld = &world;
         return true;
     }
 
@@ -142,11 +196,68 @@ public:
         return true;
     }
 
+    bool getElevationAt(double worldX, double worldZ, double& outElevation, Vec3& outNormal) const override {
+        if (m_physicsWorld) {
+            const auto hit = m_physicsWorld->raycastWorld(Vec3{worldX, 100.0, worldZ}, Vec3{worldX, -100.0, worldZ});
+            if (hit.hasHit) {
+                outElevation = hit.pointWorld.y;
+                outNormal = hit.normalWorld;
+                return true;
+            }
+        }
+        outElevation = 0.0;
+        outNormal = Vec3{0.0, 1.0, 0.0};
+        return isPositionInsidePlayableTerrain(worldX, worldZ);
+    }
+
+    SurfaceType getSurfaceMaterialAt(double worldX, double worldZ) const override {
+        return SurfaceType::MarsRegolith;
+    }
+
+    bool isPositionInsidePlayableTerrain(double worldX, double worldZ) const override {
+        return (worldX >= -60.0 && worldX <= 30.0 && worldZ >= -40.0 && worldZ <= 40.0);
+    }
+
+    TerrainContactInfo getTerrainContactAt(const Vec3& worldPos, double probeRadius = 0.0) const override {
+        TerrainContactInfo info{};
+        info.isInsidePlayableBounds = isPositionInsidePlayableTerrain(worldPos.x, worldPos.z);
+        double elev = 0.0;
+        Vec3 norm{0.0, 1.0, 0.0};
+        info.hasContact = getElevationAt(worldPos.x, worldPos.z, elev, norm);
+        info.elevation = elev;
+        info.surfaceNormal = norm;
+        info.contactPointWorld = Vec3{worldPos.x, elev, worldPos.z};
+        info.surfaceType = getSurfaceMaterialAt(worldPos.x, worldPos.z);
+        info.penetrationDepth = std::max(0.0, (elev + probeRadius) - worldPos.y);
+        info.slopeAngleRad = std::acos(clamp(norm.y, 0.0, 1.0));
+        return info;
+    }
+
+    bool queryRayContact(const Vec3& rayOrigin, const Vec3& rayDir, double maxDistance, TerrainContactInfo& outContact) const override {
+        if (m_physicsWorld) {
+            const Vec3 rayEnd = vec3Add(rayOrigin, vec3Scale(rayDir, maxDistance));
+            const auto hit = m_physicsWorld->raycastWorld(rayOrigin, rayEnd);
+            if (hit.hasHit) {
+                outContact.hasContact = true;
+                outContact.elevation = hit.pointWorld.y;
+                outContact.surfaceNormal = hit.normalWorld;
+                outContact.contactPointWorld = hit.pointWorld;
+                outContact.surfaceType = getSurfaceMaterialAt(hit.pointWorld.x, hit.pointWorld.z);
+                outContact.penetrationDepth = 0.0;
+                outContact.isInsidePlayableBounds = isPositionInsidePlayableTerrain(hit.pointWorld.x, hit.pointWorld.z);
+                outContact.slopeAngleRad = std::acos(clamp(hit.normalWorld.y, 0.0, 1.0));
+                return true;
+            }
+        }
+        return false;
+    }
+
 private:
     std::unique_ptr<btTriangleIndexVertexArray> m_meshData;
     std::vector<float> m_bvhVertices;
     std::vector<unsigned int> m_bvhIndices;
     LoadedVehicleModel m_loadedModel;
+    PhysicsWorld* m_physicsWorld{nullptr};
 };
 
 // ============================================================================
@@ -213,6 +324,7 @@ public:
             true
         );
 
+        m_physicsWorld = &world;
         return true;
     }
 
@@ -240,11 +352,68 @@ public:
         return true;
     }
 
+    bool getElevationAt(double worldX, double worldZ, double& outElevation, Vec3& outNormal) const override {
+        if (m_physicsWorld) {
+            const auto hit = m_physicsWorld->raycastWorld(Vec3{worldX, 100.0, worldZ}, Vec3{worldX, -100.0, worldZ});
+            if (hit.hasHit) {
+                outElevation = hit.pointWorld.y;
+                outNormal = hit.normalWorld;
+                return true;
+            }
+        }
+        outElevation = 0.0;
+        outNormal = Vec3{0.0, 1.0, 0.0};
+        return isPositionInsidePlayableTerrain(worldX, worldZ);
+    }
+
+    SurfaceType getSurfaceMaterialAt(double worldX, double worldZ) const override {
+        return SurfaceType::MarsBedrock;
+    }
+
+    bool isPositionInsidePlayableTerrain(double worldX, double worldZ) const override {
+        return (worldX >= -50.0 && worldX <= 50.0 && worldZ >= -50.0 && worldZ <= 50.0);
+    }
+
+    TerrainContactInfo getTerrainContactAt(const Vec3& worldPos, double probeRadius = 0.0) const override {
+        TerrainContactInfo info{};
+        info.isInsidePlayableBounds = isPositionInsidePlayableTerrain(worldPos.x, worldPos.z);
+        double elev = 0.0;
+        Vec3 norm{0.0, 1.0, 0.0};
+        info.hasContact = getElevationAt(worldPos.x, worldPos.z, elev, norm);
+        info.elevation = elev;
+        info.surfaceNormal = norm;
+        info.contactPointWorld = Vec3{worldPos.x, elev, worldPos.z};
+        info.surfaceType = getSurfaceMaterialAt(worldPos.x, worldPos.z);
+        info.penetrationDepth = std::max(0.0, (elev + probeRadius) - worldPos.y);
+        info.slopeAngleRad = std::acos(clamp(norm.y, 0.0, 1.0));
+        return info;
+    }
+
+    bool queryRayContact(const Vec3& rayOrigin, const Vec3& rayDir, double maxDistance, TerrainContactInfo& outContact) const override {
+        if (m_physicsWorld) {
+            const Vec3 rayEnd = vec3Add(rayOrigin, vec3Scale(rayDir, maxDistance));
+            const auto hit = m_physicsWorld->raycastWorld(rayOrigin, rayEnd);
+            if (hit.hasHit) {
+                outContact.hasContact = true;
+                outContact.elevation = hit.pointWorld.y;
+                outContact.surfaceNormal = hit.normalWorld;
+                outContact.contactPointWorld = hit.pointWorld;
+                outContact.surfaceType = getSurfaceMaterialAt(hit.pointWorld.x, hit.pointWorld.z);
+                outContact.penetrationDepth = 0.0;
+                outContact.isInsidePlayableBounds = isPositionInsidePlayableTerrain(hit.pointWorld.x, hit.pointWorld.z);
+                outContact.slopeAngleRad = std::acos(clamp(hit.normalWorld.y, 0.0, 1.0));
+                return true;
+            }
+        }
+        return false;
+    }
+
 private:
     std::unique_ptr<btTriangleIndexVertexArray> m_meshData;
     std::vector<float> m_bvhVertices;
     std::vector<unsigned int> m_bvhIndices;
     LoadedVehicleModel m_loadedModel;
+    PhysicsWorld* m_physicsWorld{nullptr};
 };
 
 // ============================================================================
@@ -334,6 +503,7 @@ public:
             true
         );
 
+        m_physicsWorld = &world;
         return true;
     }
 
@@ -476,10 +646,124 @@ public:
         return true;
     }
 
+    bool getElevationAt(double worldX, double worldZ, double& outElevation, Vec3& outNormal) const override {
+        if (m_heightfieldData.empty()) {
+            outElevation = 0.0;
+            outNormal = Vec3{0.0, 1.0, 0.0};
+            return false;
+        }
+
+        const int cols = 1024;
+        const int rows = 1024;
+        const double halfWidth = 0.5 * static_cast<double>(cols - 1);
+        const double halfDepth = 0.5 * static_cast<double>(rows - 1);
+
+        const double cFloat = worldX + halfWidth;
+        const double rFloat = worldZ + halfDepth;
+
+        if (cFloat < 0.0 || cFloat > static_cast<double>(cols - 1) ||
+            rFloat < 0.0 || rFloat > static_cast<double>(rows - 1)) {
+            const int cClamp = std::clamp(static_cast<int>(std::round(cFloat)), 0, cols - 1);
+            const int rClamp = std::clamp(static_cast<int>(std::round(rFloat)), 0, rows - 1);
+            outElevation = static_cast<double>(m_heightfieldData[static_cast<size_t>(rClamp * cols + cClamp)]);
+            outNormal = Vec3{0.0, 1.0, 0.0};
+            return false;
+        }
+
+        const int c0 = std::clamp(static_cast<int>(std::floor(cFloat)), 0, cols - 2);
+        const int c1 = c0 + 1;
+        const double u = cFloat - static_cast<double>(c0);
+
+        const int r0 = std::clamp(static_cast<int>(std::floor(rFloat)), 0, rows - 2);
+        const int r1 = r0 + 1;
+        const double v = rFloat - static_cast<double>(r0);
+
+        const double h00 = static_cast<double>(m_heightfieldData[static_cast<size_t>(r0 * cols + c0)]);
+        const double h10 = static_cast<double>(m_heightfieldData[static_cast<size_t>(r0 * cols + c1)]);
+        const double h01 = static_cast<double>(m_heightfieldData[static_cast<size_t>(r1 * cols + c0)]);
+        const double h11 = static_cast<double>(m_heightfieldData[static_cast<size_t>(r1 * cols + c1)]);
+
+        // Bilinear height interpolation
+        outElevation = (1.0 - u) * (1.0 - v) * h00 +
+                       u * (1.0 - v) * h10 +
+                       (1.0 - u) * v * h01 +
+                       u * v * h11;
+
+        // Analytical partial derivatives for continuous surface normal gradient
+        const double dh_dx = (1.0 - v) * (h10 - h00) + v * (h11 - h01);
+        const double dh_dz = (1.0 - u) * (h01 - h00) + u * (h11 - h10);
+        outNormal = vec3Normalize(Vec3{-dh_dx, 1.0, -dh_dz});
+
+        return true;
+    }
+
+    SurfaceType getSurfaceMaterialAt(double worldX, double worldZ) const override {
+        double elev = 0.0;
+        Vec3 norm{0.0, 1.0, 0.0};
+        getElevationAt(worldX, worldZ, elev, norm);
+        if (norm.y < 0.927) { // Slopes > 22 deg: exposed basalt bedrock
+            return SurfaceType::MarsBedrock;
+        }
+        return SurfaceType::MarsRegolith;
+    }
+
+    bool isPositionInsidePlayableTerrain(double worldX, double worldZ) const override {
+        const double half = 0.5 * 1023.0; // 511.5 m
+        return (worldX >= -half && worldX <= half && worldZ >= -half && worldZ <= half);
+    }
+
+    TerrainContactInfo getTerrainContactAt(const Vec3& worldPos, double probeRadius = 0.0) const override {
+        TerrainContactInfo info{};
+        info.isInsidePlayableBounds = isPositionInsidePlayableTerrain(worldPos.x, worldPos.z);
+        double elev = 0.0;
+        Vec3 norm{0.0, 1.0, 0.0};
+        info.hasContact = getElevationAt(worldPos.x, worldPos.z, elev, norm);
+        info.elevation = elev;
+        info.surfaceNormal = norm;
+        info.contactPointWorld = Vec3{worldPos.x, elev, worldPos.z};
+        info.surfaceType = getSurfaceMaterialAt(worldPos.x, worldPos.z);
+        info.penetrationDepth = std::max(0.0, (elev + probeRadius) - worldPos.y);
+        info.slopeAngleRad = std::acos(clamp(norm.y, 0.0, 1.0));
+        return info;
+    }
+
+    bool queryRayContact(const Vec3& rayOrigin, const Vec3& rayDir, double maxDistance, TerrainContactInfo& outContact) const override {
+        if (m_physicsWorld) {
+            const Vec3 rayEnd = vec3Add(rayOrigin, vec3Scale(rayDir, maxDistance));
+            const auto hit = m_physicsWorld->raycastWorld(rayOrigin, rayEnd);
+            if (hit.hasHit) {
+                outContact.hasContact = true;
+                outContact.elevation = hit.pointWorld.y;
+                outContact.surfaceNormal = hit.normalWorld;
+                outContact.contactPointWorld = hit.pointWorld;
+                outContact.surfaceType = getSurfaceMaterialAt(hit.pointWorld.x, hit.pointWorld.z);
+                outContact.penetrationDepth = 0.0;
+                outContact.isInsidePlayableBounds = isPositionInsidePlayableTerrain(hit.pointWorld.x, hit.pointWorld.z);
+                outContact.slopeAngleRad = std::acos(clamp(hit.normalWorld.y, 0.0, 1.0));
+                return true;
+            }
+        }
+        double elev = 0.0;
+        Vec3 norm{0.0, 1.0, 0.0};
+        if (getElevationAt(rayOrigin.x, rayOrigin.z, elev, norm)) {
+            outContact.hasContact = true;
+            outContact.elevation = elev;
+            outContact.surfaceNormal = norm;
+            outContact.contactPointWorld = Vec3{rayOrigin.x, elev, rayOrigin.z};
+            outContact.surfaceType = getSurfaceMaterialAt(rayOrigin.x, rayOrigin.z);
+            outContact.penetrationDepth = 0.0;
+            outContact.isInsidePlayableBounds = isPositionInsidePlayableTerrain(rayOrigin.x, rayOrigin.z);
+            outContact.slopeAngleRad = std::acos(clamp(norm.y, 0.0, 1.0));
+            return true;
+        }
+        return false;
+    }
+
 private:
     std::vector<float> m_heightfieldData;
     float m_minHeight{0.0f};
     float m_maxHeight{0.0f};
+    PhysicsWorld* m_physicsWorld{nullptr};
 };
 
 // ============================================================================
@@ -511,8 +795,8 @@ std::string TerrainManager::getActiveMapId() const {
 bool TerrainManager::switchMap(
     const std::string& mapId,
     PhysicsWorld& world,
-    TrackRendererGL& trackRenderer,
-    SkyRendererGL& skyRenderer
+    TrackRendererGL* trackRenderer,
+    SkyRendererGL* skyRenderer
 ) {
     size_t targetIdx = m_maps.size();
     for (size_t i = 0; i < m_maps.size(); ++i) {
@@ -534,21 +818,27 @@ bool TerrainManager::switchMap(
 
     // 1. Clear static collision shapes
     world.clearStaticColliders();
+    world.setTerrainManager(this);
+    setPhysicsWorld(&world);
 
     // 2. Build map physics
     map->buildPhysics(world);
 
-    // 3. Build map visual graphics
-    if (mapId == "proving_ground") {
-        trackRenderer.rebuildProvingGround(world.trackElements);
-    } else {
-        map->buildGraphics(trackRenderer);
+    // 3. Build map visual graphics if renderer is provided (non-headless)
+    if (trackRenderer) {
+        if (mapId == "proving_ground") {
+            trackRenderer->rebuildProvingGround(world.trackElements);
+        } else {
+            map->buildGraphics(*trackRenderer);
+        }
     }
 
     // 4. Update planetary environment
     const auto env = map->getEnvironment();
     world.setEnvironment(env);
-    skyRenderer.setEnvironment(env);
+    if (skyRenderer) {
+        skyRenderer->setEnvironment(env);
+    }
 
     // 5. Teleport vehicle to primary spawn point
     const auto spawns = map->getSpawnPoints();
@@ -564,6 +854,46 @@ bool TerrainManager::switchMap(
     std::cout << "[TerrainManager] Map switch complete. Environment: " << env.displayName
               << " (g=" << env.gravity << " m/s^2, rho=" << env.airDensity << " kg/m^3)." << std::endl;
     return true;
+}
+
+bool TerrainManager::getElevationAt(double worldX, double worldZ, double& outElevation, Vec3& outNormal) const {
+    if (auto m = getActiveMap()) {
+        return m->getElevationAt(worldX, worldZ, outElevation, outNormal);
+    }
+    outElevation = 0.0;
+    outNormal = Vec3{0.0, 1.0, 0.0};
+    return false;
+}
+
+SurfaceType TerrainManager::getSurfaceMaterialAt(double worldX, double worldZ) const {
+    if (auto m = getActiveMap()) {
+        return m->getSurfaceMaterialAt(worldX, worldZ);
+    }
+    return SurfaceType::DryAsphalt;
+}
+
+bool TerrainManager::isPositionInsidePlayableTerrain(double worldX, double worldZ) const {
+    if (auto m = getActiveMap()) {
+        return m->isPositionInsidePlayableTerrain(worldX, worldZ);
+    }
+    return false;
+}
+
+TerrainContactInfo TerrainManager::getTerrainContactAt(const Vec3& worldPos, double probeRadius) const {
+    if (auto m = getActiveMap()) {
+        return m->getTerrainContactAt(worldPos, probeRadius);
+    }
+    TerrainContactInfo info{};
+    info.elevation = 0.0;
+    info.surfaceNormal = Vec3{0.0, 1.0, 0.0};
+    return info;
+}
+
+bool TerrainManager::queryRayContact(const Vec3& rayOrigin, const Vec3& rayDir, double maxDistance, TerrainContactInfo& outContact) const {
+    if (auto m = getActiveMap()) {
+        return m->queryRayContact(rayOrigin, rayDir, maxDistance, outContact);
+    }
+    return false;
 }
 
 } // namespace torquelab

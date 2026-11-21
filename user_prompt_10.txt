@@ -1,0 +1,952 @@
+<USER_REQUEST>
+# PROJECT ARES — PERSEVERANCE WHEEL COLLISION, TERRAIN ELEVATION MAPPING AND WORLD-PHYSICS INTEGRATION
+
+## CRITICAL DIRECTIVE — READ THIS ENTIRE PROMPT BEFORE STARTING AND STRICTLY FOLLOW EVERY REQUIREMENT
+
+The Perseverance rover implementation is now substantially complete.
+
+The model hierarchy, wheel articulation, rocker-bogie suspension, and general rendering have been implemented.
+
+However, an important physics problem remains:
+
+**The rover wheels are sinking into the ground and the terrain does not appear to be functioning as a properly mapped physical world.**
+
+This must be fixed at the underlying physics, terrain, collision, and coordinate-system levels.
+
+I want the imported terrain/world to function as the actual physical environment, following the general world-model approach used in my earlier Backrooms project, where the imported map/world geometry represented the environment.
+
+For Project ARES, this must also correctly incorporate the actual elevations of the imported Mars terrain.
+
+This is an implementation task, not a request for suggestions.
+
+READ THIS ENTIRE PROMPT, UNDERSTAND ALL REQUIREMENTS, INSPECT THE EXISTING PROJECT, AND IMPLEMENT THE COMPLETE SOLUTION.
+
+Do not skip sections.
+
+Do not wait for input or approval.
+
+Do not stop after writing an analysis or plan.
+
+Continue investigating, implementing, building, testing, and correcting problems until the acceptance criteria are met.
+
+Preserve everything that is already working.
+
+---
+
+# 1. COMPLETE INVESTIGATION BEFORE MODIFICATION
+
+Before changing anything, inspect the complete existing implementation.
+
+Read:
+
+- The complete `GEMINI.md`.
+- Existing Perseverance implementation.
+- Rover wheel and mobility systems.
+- Rocker-bogie and differential systems.
+- Wheel articulation and transform code.
+- Bullet Physics integration.
+- Terrain loading and preprocessing.
+- Terrain rendering.
+- Terrain collision generation.
+- World/map loading and switching.
+- Model-loading and asset-path systems.
+- Existing tests and build configuration.
+
+Identify exactly how the current rover interacts with the ground.
+
+Investigate:
+
+- Whether wheels use raycasts, sphere sweeps, cylinders, convex shapes, or rigid-body collision.
+- Whether the rover suspension is physically simulated or primarily kinematic.
+- How wheel contact points are calculated.
+- How terrain elevation is sampled.
+- How contact forces are generated.
+- How the terrain collision shape is constructed.
+- Whether the visible terrain and collision terrain use the same source data.
+- Whether the wheel's visual and physical transforms match.
+- Whether the model scale is correct.
+- Whether collision shapes use the correct dimensions.
+- Whether coordinate conversions are being applied consistently.
+
+Do not assume the cause is simply an incorrect wheel radius.
+
+Establish the actual root causes before modifying the system.
+
+---
+
+# 2. WHEEL COLLISION MUST MATCH THE ACTUAL WHEEL GEOMETRY
+
+The most important immediate issue is that the rover wheels sink into the surface.
+
+Correct this using a proper wheel collision representation.
+
+The six wheels must interact with the terrain through physically meaningful collision and contact calculations.
+
+Do not rely exclusively on visual wheel positioning.
+
+Do not simply move the wheels upwards to hide the problem.
+
+Do not introduce arbitrary vertical offsets.
+
+## 2.1 Inspect the original wheel model
+
+Use the actual Perseverance model hierarchy and previously established semantic component mapping.
+
+Identify all six wheel meshes and their associated nodes:
+
+- Left Front.
+- Left Middle.
+- Left Rear.
+- Right Front.
+- Right Middle.
+- Right Rear.
+
+For each wheel, inspect:
+
+- Actual mesh dimensions.
+- Wheel radius.
+- Wheel width.
+- Local axle.
+- Rotation pivot.
+- Wheel centre.
+- Mounting position.
+- Local transform.
+- World transform.
+- Parent suspension assembly.
+
+Use the actual model geometry and previously validated scale.
+
+Do not guess the dimensions.
+
+## 2.2 Create proper wheel collision geometry
+
+The visible wheel mesh and its physical collision representation must be correctly aligned.
+
+Implement a suitable collision representation for each wheel.
+
+Evaluate the appropriate Bullet Physics options.
+
+Possible representations include:
+
+- Cylinder collision shapes.
+- Convex collision shapes.
+- A suitable compound collision shape.
+- Another stable wheel-contact representation compatible with the existing rover architecture.
+
+Choose the method based on the actual implementation and test its behaviour.
+
+Important distinction:
+
+Do not blindly use a highly detailed tread mesh as the dynamic collision shape.
+
+The detailed visual wheel contains many small geometric features. Using every tread triangle as a dynamic collision surface can create unstable contact, excessive computational cost, and unwanted snagging.
+
+Instead, preserve the detailed visible wheel and use a physically appropriate collision proxy that accurately represents its overall dimensions and rolling geometry.
+
+If a simplified cylinder or convex proxy is used, it must:
+
+- Match the measured wheel radius.
+- Match the measured wheel width.
+- Use the correct local axle.
+- Be positioned at the actual wheel centre.
+- Rotate consistently with the visual wheel.
+- Follow steering articulation where applicable.
+- Follow rocker-bogie articulation.
+- Remain synchronized with the visual wheel.
+- Generate stable ground contact.
+
+Do not use a sphere as a substitute for the wheel unless there is a documented, justified reason and the resulting rolling behaviour has been validated.
+
+## 2.3 Collision and visual synchronization
+
+The physical wheel and visible wheel must always agree.
+
+Verify:
+
+- Same wheel centre.
+- Same effective radius.
+- Same width.
+- Same rotation axis.
+- Same steering orientation.
+- Same parent articulation.
+- Same world transform.
+
+Do not allow the collision proxy to remain behind while the visual wheel moves.
+
+Do not apply model scale twice.
+
+Do not use different offsets in rendering and physics.
+
+## 2.4 Tread and wheel-ground interaction
+
+Perseverance has distinctive metal wheels with raised tread features.
+
+Preserve the detailed visible tread geometry.
+
+For the physics system, determine an appropriate representation that provides stable contact without unrealistic snagging.
+
+If necessary, use a smooth primary collision proxy and implement an additional simplified tread interaction model separately.
+
+Do not let tiny visual tread triangles destabilize the simulation.
+
+---
+
+# 3. FIX THE UNDERLYING WHEEL-GROUND CONTACT SYSTEM
+
+Inspect the current wheel-ground contact algorithm.
+
+The wheels must not sink through the terrain even when the rover is stationary.
+
+Investigate:
+
+- Contact-point generation.
+- Contact normals.
+- Contact penetration depth.
+- Contact response.
+- Suspension force calculation.
+- Wheel support forces.
+- Ground reaction forces.
+- Friction.
+- Solver settings.
+- Collision margins.
+- Contact tolerances.
+- Time-step stability.
+- Collision filtering.
+- Rigid-body mass and inertia.
+- Constraint configuration.
+
+Identify whether the problem is caused by missing collision, incorrect contact points, insufficient support force, incorrect suspension geometry, or another issue.
+
+## 3.1 Contact resolution
+
+Ensure that wheel-ground penetration is handled correctly.
+
+The simulation must generate appropriate normal forces to support the rover's weight.
+
+Prevent:
+
+- Wheels passing through terrain.
+- Persistent deep penetration.
+- Uncontrolled bouncing.
+- Wheel jitter.
+- Floating wheels.
+- Wheels becoming detached from their suspension.
+- Contact points appearing above or below the actual surface.
+
+## 3.2 Suspension integration
+
+Preserve the existing rocker-bogie suspension.
+
+Do not solve wheel sinking by introducing conventional car suspension.
+
+The six wheels must remain connected through:
+
+- Two rocker assemblies.
+- Two bogies.
+- Correct pivot relationships.
+- Central differential.
+- Existing wheel mounting structures.
+
+Ground reaction forces must interact consistently with the suspension mechanism.
+
+Ensure that the rover's chassis weight is distributed through the six wheel contacts and the actual linkage system.
+
+## 3.3 Solver stability
+
+Inspect Bullet Physics settings and the rover's update sequence.
+
+Check:
+
+- Fixed timestep.
+- Solver iterations.
+- Substeps.
+- Constraint order.
+- Contact generation.
+- Collision margins.
+- Restitution.
+- Friction.
+- Rigid-body activation.
+- Sleeping behaviour.
+
+Make changes only when supported by testing.
+
+Do not increase solver iterations blindly to hide incorrect collision geometry.
+
+Maintain deterministic and stable simulation behaviour wherever possible.
+
+---
+
+# 4. IMPORTED TERRAIN MUST BE THE ACTUAL PHYSICAL WORLD
+
+This is another critical requirement.
+
+I want the imported Mars world/terrain to behave like the actual world model in the Backrooms project.
+
+The imported terrain must define:
+
+- Surface geometry.
+- Elevation.
+- World-space position.
+- Surface orientation.
+- Collision boundaries.
+- Wheel contact.
+- Rover traversal.
+
+The terrain must not be treated as a decorative background or visual-only mesh.
+
+## 4.1 Inspect the imported world and terrain assets
+
+Inspect every relevant terrain asset and determine:
+
+- Whether it is a GLB/GLTF world model.
+- Whether it contains actual elevation geometry.
+- Whether it is a textured flat mesh.
+- Whether elevation comes from a separate GeoTIFF/DTM.
+- Whether multiple terrain tiles are present.
+- Whether the terrain is already triangulated.
+- Whether its collision geometry exists.
+- Whether it has an established coordinate system.
+- Whether the visual and physical representations currently differ.
+
+Do not assume a texture contains elevation information.
+
+A colour texture is not automatically a heightmap.
+
+Determine which source is authoritative for the actual terrain elevations.
+
+If both a terrain model and a DTM exist, establish how they relate spatially and geometrically.
+
+Do not accidentally combine inconsistent terrain sources.
+
+## 4.2 Use the imported world as a stable world-space environment
+
+Implement a proper terrain/world representation.
+
+The imported world must have a stable transform independent of the rover.
+
+The rover moves through the world.
+
+The world does not move with the rover.
+
+Ensure:
+
+- Terrain remains stationary.
+- Terrain chunks retain stable world coordinates.
+- Rover position is independent.
+- Camera movement does not change terrain geometry.
+- Terrain collision remains aligned with rendering.
+- Map switching updates the world correctly.
+
+Do not attach the terrain to the rover hierarchy.
+
+Do not apply the rover's transform to the terrain.
+
+Do not recreate or reposition the entire terrain every frame.
+
+## 4.3 Preserve terrain geometry and elevation
+
+If the source is a mesh, use its actual vertex positions and triangles.
+
+If the source is a DTM/heightmap, generate terrain geometry and collision from the same elevation data.
+
+If both are used, define a clear and validated relationship between them.
+
+Do not replace actual elevation with a flat plane.
+
+Do not discard elevation differences.
+
+Do not apply arbitrary vertical scaling.
+
+---
+
+# 5. TERRAIN ELEVATION MAPPING AND GEOSPATIAL ACCURACY
+
+The imported Mars terrain must correctly represent its actual elevation.
+
+Inspect the original source data and metadata.
+
+For GeoTIFF/DTM assets, validate:
+
+- CRS.
+- Projection.
+- Geotransform.
+- Pixel spacing.
+- Horizontal units.
+- Vertical units.
+- Elevation range.
+- NoData values.
+- Axis orientation.
+- Dataset dimensions.
+- Geographic coverage.
+
+Use appropriate geospatial processing, preferably GDAL/Rasterio-compatible preprocessing.
+
+Do not rely on ordinary image-loading methods to interpret geospatial data.
+
+## 5.1 Correct coordinate conversion
+
+Establish one consistent coordinate convention for:
+
+- Imported terrain.
+- Rover model.
+- Physics world.
+- Collision shapes.
+- Camera.
+- World transforms.
+
+The renderer and Bullet Physics must agree about:
+
+- Up axis.
+- Forward axis.
+- Left/right orientation.
+- Coordinate handedness.
+- Origin.
+- Scale.
+
+Do not assume the terrain and rover model use the same coordinate convention.
+
+Convert explicitly where required.
+
+Verify the result using known points and measured geometry.
+
+## 5.2 Elevation accuracy
+
+The height of each terrain sample must be represented correctly in world space.
+
+Do not normalize elevation to a 0–1 range without restoring the actual physical scale.
+
+Do not confuse:
+
+- Horizontal pixel spacing.
+- Vertical elevation units.
+- Model units.
+- Simulation units.
+
+The world should use consistent SI units.
+
+Prefer:
+
+1 simulation world unit = 1 metre.
+
+If a conversion layer is required, centralize it.
+
+Do not apply conversion factors independently in the rendering and collision systems.
+
+## 5.3 NoData and missing terrain
+
+Handle invalid elevation samples correctly.
+
+Do not interpret NoData values as real elevations.
+
+Do not generate enormous vertical spikes or flat artificial surfaces from invalid data.
+
+Ensure missing regions are handled explicitly.
+
+Prevent:
+
+- Large holes.
+- Unexpected vertical walls.
+- Sudden elevation jumps.
+- Incorrect terrain boundaries.
+- Invisible collision surfaces.
+
+---
+
+# 6. TERRAIN COLLISION IMPLEMENTATION
+
+The visible terrain and physical terrain must represent the same surface.
+
+Evaluate suitable Bullet Physics representations:
+
+- `btHeightfieldTerrainShape` for appropriate regular elevation grids.
+- `btBvhTriangleMeshShape` for suitable static triangulated terrain.
+- Chunked static collision meshes for larger or irregular terrain.
+- Another appropriate static terrain representation if justified.
+
+Choose based on the actual terrain data and performance requirements.
+
+Do not blindly select one representation for all terrain types.
+
+## 6.1 Collision generation
+
+Build terrain collision using the same authoritative elevation or geometry source as the renderer.
+
+Ensure:
+
+- Correct horizontal scale.
+- Correct vertical scale.
+- Correct terrain origin.
+- Correct axis orientation.
+- Correct triangle winding.
+- Correct normals.
+- Correct collision bounds.
+- Correct chunk transforms.
+
+Do not create collision terrain at a different scale or position from the rendered terrain.
+
+## 6.2 Collision performance
+
+The Mars terrain may be large.
+
+Do not create an unnecessarily expensive collision mesh for the entire world.
+
+Use an appropriate terrain chunking strategy.
+
+Ensure:
+
+- Efficient collision registration.
+- Correct broadphase bounds.
+- Stable chunk boundaries.
+- No gaps between collision chunks.
+- No overlapping collision surfaces.
+- Safe loading and unloading.
+- No stale collision shapes after map switching.
+
+If collision chunks are loaded around the rover, ensure the rover cannot move into unloaded regions and fall through the world.
+
+Use a safe streaming boundary or ensure the complete intended playable region has collision loaded.
+
+## 6.3 Visual/collision correspondence
+
+At multiple test locations, compare:
+
+- Rendered surface height.
+- Collision surface height.
+- Sampled elevation height.
+- Wheel contact height.
+
+They should agree within a documented numerical tolerance.
+
+Do not hide mismatches with wheel offsets.
+
+---
+
+# 7. ROVER AND TERRAIN PHYSICS MUST USE THE SAME SCALE
+
+Preserve the previous scale validation.
+
+Use SI units.
+
+Verify:
+
+- Rover dimensions.
+- Wheel radius.
+- Wheel width.
+- Wheel mounting positions.
+- Suspension pivot distances.
+- Terrain horizontal spacing.
+- Terrain elevation.
+- Collision dimensions.
+- Rover mass.
+- Wheel mass or equivalent inertia.
+- Gravity.
+- Contact distances.
+
+Mars gravity should remain approximately:
+
+3.71 m/s².
+
+Do not globally change gravity in a way that breaks Earth-based tests.
+
+The visual wheel radius, collision wheel radius, and physics wheel radius must match.
+
+The terrain's rendered elevation and collision elevation must match.
+
+Do not use arbitrary corrections.
+
+---
+
+# 8. MARS REGOLITH AND SURFACE INTERACTION
+
+The rover should interact with Martian terrain more realistically than an ordinary road car.
+
+Do not simply apply the old TorqueLab Pacejka tyre model to the wheels.
+
+Preserve the dedicated rover wheel-ground model.
+
+For this phase, prioritize stable and correct contact.
+
+However, prepare the system to support more advanced terramechanics.
+
+Potential future properties include:
+
+- Surface material classification.
+- Regolith resistance.
+- Wheel sinkage.
+- Soil deformation.
+- Shear resistance.
+- Wheel slip.
+- Traction loss.
+- Rolling resistance.
+- Different responses on rock, dust, and sand.
+
+Do not invent precise soil properties without documented sources.
+
+Use configurable provisional parameters if required.
+
+Keep surface interaction separate from wheel collision geometry.
+
+A wheel can have correct collision and still experience realistic slip or sinkage due to soil mechanics. These are separate phenomena and must not be confused.
+
+For the current task, prevent unintended geometric penetration through the terrain.
+
+If intentional soil sinkage is implemented, it must be controlled by a documented physical model rather than uncontrolled collision failure.
+
+---
+
+# 9. WORLD/MAP MODEL ARCHITECTURE
+
+Use the general imported-world approach from the Backrooms project as an architectural reference.
+
+Inspect how the Backrooms project represented its world model and collision, if the relevant implementation or documentation is available in the current project context.
+
+Do not blindly copy Backrooms-specific code or assumptions.
+
+ARES needs a terrain-aware world system.
+
+The world should provide a unified interface for:
+
+- Loading terrain.
+- Unloading terrain.
+- Rendering terrain.
+- Generating collision.
+- Querying elevation.
+- Querying surface normal.
+- Querying surface material.
+- Querying wheel contact.
+- Checking playable bounds.
+- Switching maps.
+
+Use one authoritative world representation so that rendering and physics cannot silently disagree.
+
+Where appropriate, expose functions conceptually similar to:
+
+- `getElevationAt(worldPosition)`
+- `getSurfaceNormalAt(worldPosition)`
+- `getSurfaceMaterialAt(worldPosition)`
+- `getTerrainContactAt(worldPosition)`
+- `isPositionInsidePlayableTerrain(worldPosition)`
+
+These are examples, not mandatory function names.
+
+Use the project's existing naming and architecture where suitable.
+
+Avoid unnecessary rewrites.
+
+---
+
+# 10. MAP SWITCHING AND WORLD LIFECYCLE
+
+Preserve the existing map-switching functionality.
+
+When switching maps:
+
+1. Safely remove the previous terrain collision.
+2. Remove or deactivate old terrain resources.
+3. Load the new terrain.
+4. Build or register its collision.
+5. Validate its coordinate transform.
+6. Ensure the rover is placed at a valid starting position.
+7. Ensure all wheel contacts are recalculated.
+8. Ensure the camera follows the rover correctly.
+9. Ensure no stale collision shapes remain.
+
+Prevent crashes during map switching.
+
+Do not leave old terrain collision objects registered after unloading a map.
+
+Do not leave the rover at coordinates that are outside the new terrain.
+
+Provide a safe spawn-position validation.
+
+---
+
+# 11. ROVER INITIALIZATION AND GROUNDING
+
+When the application starts or a map is changed, the rover must be initialized safely.
+
+Determine the terrain elevation beneath the rover.
+
+Place the rover at an appropriate starting height and orientation.
+
+Do not simply place its chassis at an arbitrary fixed Y coordinate.
+
+Ensure all six wheels have valid ground contact or a physically reasonable initial clearance.
+
+Avoid initializing the rover:
+
+- Inside the terrain.
+- Far above the terrain.
+- With wheels already penetrating the ground.
+- With invalid collision shapes.
+- With unstable joint constraints.
+
+Allow the physics simulation to settle naturally.
+
+Avoid artificial teleportation or repeated vertical corrections during normal operation.
+
+If a one-time initialization correction is needed, calculate it from the actual terrain and wheel geometry.
+
+---
+
+# 12. DEBUGGING AND DIAGNOSTICS
+
+Add or improve a toggleable physics diagnostics mode.
+
+It should display:
+
+- Six wheel collision shapes.
+- Wheel centres.
+- Wheel radii.
+- Wheel rotation axes.
+- Steering pivots.
+- Rocker pivots.
+- Bogie pivots.
+- Suspension link endpoints.
+- Terrain collision geometry.
+- Actual contact points.
+- Contact normals.
+- Contact penetration depth.
+- Wheel-ground distance.
+- Wheel support force.
+- Terrain elevation at each wheel.
+
+Provide useful numerical diagnostics:
+
+- Wheel contact status.
+- Wheel angular velocity.
+- Wheel slip.
+- Contact normal force.
+- Contact penetration.
+- Wheel centre elevation.
+- Terrain height beneath each wheel.
+- Suspension articulation angles.
+- Chassis orientation.
+
+Debug visualization must be optional.
+
+Normal simulation mode should remain visually clean.
+
+Do not use debug visualizations as a substitute for fixing the underlying physics.
+
+---
+
+# 13. REQUIRED TESTING
+
+Do not claim the problem is solved merely because the project compiles.
+
+Perform actual physics and runtime validation.
+
+## 13.1 Static wheel contact tests
+
+Place the rover on flat terrain.
+
+Verify:
+
+- All six wheels contact the surface correctly.
+- No wheel sinks into the ground.
+- No wheel floats excessively.
+- Collision shapes match the visible wheels.
+- The chassis reaches a stable resting position.
+- The rover does not bounce uncontrollably.
+
+Run the simulation long enough to check for gradual penetration or constraint drift.
+
+## 13.2 Uneven terrain tests
+
+Test on:
+
+- Small elevation changes.
+- Rocks.
+- Uneven terrain.
+- Slopes.
+- Depressions.
+- One-sided elevation changes.
+- Terrain with different wheel heights.
+
+Verify that the rocker-bogie system responds correctly.
+
+The wheels must remain physically supported by the terrain without being forced into arbitrary positions.
+
+## 13.3 Terrain correspondence tests
+
+At multiple terrain locations, compare:
+
+- Source elevation.
+- Rendered elevation.
+- Collision elevation.
+- Sampled elevation.
+
+Check both flat and irregular areas.
+
+Verify that collision geometry follows the actual imported terrain.
+
+## 13.4 Movement tests
+
+Test:
+
+- Forward movement.
+- Reverse movement.
+- Steering.
+- Tight turns.
+- Stationary operation.
+- Movement over obstacles.
+- Movement over uneven surfaces.
+
+Verify that wheel collision remains stable during articulation and rotation.
+
+## 13.5 Map-switching tests
+
+Switch between available maps.
+
+Verify:
+
+- Correct terrain loads.
+- Correct collision loads.
+- Old collision is removed.
+- Rover starts at a valid position.
+- No terrain follows the rover.
+- No stale terrain geometry remains.
+- No crash occurs.
+
+## 13.6 Extended stability tests
+
+Run the simulation for an extended period.
+
+Check for:
+
+- Wheel penetration.
+- Physics jitter.
+- Constraint drift.
+- NaN/Inf values.
+- Crashes.
+- Memory leaks.
+- Invalid collision resources.
+- Unloaded terrain under the rover.
+
+## 13.7 Regression tests
+
+Ensure all previously working functionality remains operational:
+
+- Perseverance model rendering.
+- Model hierarchy.
+- Wheel rotation.
+- Wheel steering.
+- Rocker-bogie articulation.
+- Differential coupling.
+- Terrain rendering.
+- Map switching.
+- Mars environment configuration.
+- Existing tests.
+
+Do not disable failing tests to obtain a successful build.
+
+---
+
+# 14. DEVELOPMENT AND BUILD RULES
+
+1. Read this entire prompt before modifying anything.
+2. Read the complete `GEMINI.md`.
+3. Inspect the actual wheel and terrain implementation.
+4. Establish the root cause before making changes.
+5. Preserve the detailed Perseverance model.
+6. Preserve the working rocker-bogie system.
+7. Use proper wheel collision geometry.
+8. Use the imported world as the authoritative physical environment.
+9. Preserve actual terrain elevations.
+10. Keep visual and collision geometry synchronized.
+11. Maintain consistent SI units.
+12. Do not apply arbitrary wheel offsets.
+13. Do not use a flat plane to conceal terrain defects.
+14. Do not fake terrain elevation using textures.
+15. Do not introduce conventional car suspension.
+16. Do not introduce unnecessary architectural rewrites.
+17. Do not break map switching.
+18. Do not create additional build directories.
+19. Maintain exactly one canonical build directory: `Project ARES/build/`.
+20. Do not disable tests.
+21. Do not claim unperformed tests passed.
+22. Do not claim graphical testing unless it was actually performed.
+23. Do not stop after analysis.
+24. Do not wait for approval.
+25. Continue implementing and correcting problems until the acceptance criteria are satisfied.
+
+If a particular physical detail cannot be implemented reliably with the current architecture, investigate an appropriate alternative and document the limitation.
+
+---
+
+# 15. FINAL ACCEPTANCE CRITERIA
+
+The work is complete only when:
+
+- [ ] All six wheels have correctly dimensioned collision representations.
+- [ ] Wheel collision shapes match the visible wheel geometry.
+- [ ] Wheel local axes are correct.
+- [ ] Wheels remain attached during articulation.
+- [ ] Wheels no longer sink unintentionally into the terrain.
+- [ ] Wheels do not float excessively above the terrain.
+- [ ] Contact forces support the rover correctly.
+- [ ] Rocker-bogie articulation remains operational.
+- [ ] The central differential remains functional.
+- [ ] The imported world is a real physical environment.
+- [ ] Actual terrain elevations are represented correctly.
+- [ ] Terrain collision matches terrain rendering.
+- [ ] Terrain remains stationary in world space.
+- [ ] The rover moves independently through the world.
+- [ ] Coordinate systems and SI units are consistent.
+- [ ] NoData and missing terrain are handled safely.
+- [ ] Terrain chunks do not introduce collision gaps.
+- [ ] Map switching remains functional.
+- [ ] Rover initialization places it safely on the terrain.
+- [ ] Mars gravity remains correctly configurable.
+- [ ] No new crashes or physics instability are introduced.
+- [ ] Existing working functionality is preserved.
+- [ ] The canonical build directory remains `Project ARES/build/`.
+- [ ] Relevant tests pass.
+- [ ] Runtime physics behaviour has been inspected.
+
+---
+
+# 16. FINAL IMPLEMENTATION REPORT
+
+After completing the work, provide:
+
+1. Actual root cause of wheel sinking.
+2. Existing wheel collision implementation.
+3. New wheel collision implementation.
+4. Actual wheel dimensions and collision dimensions.
+5. How visual and physical transforms are synchronized.
+6. How wheel-ground contact is calculated.
+7. How support forces are generated.
+8. How the imported world is represented.
+9. How source terrain elevations are interpreted.
+10. How terrain collision is generated.
+11. How rendering and collision correspondence is validated.
+12. How map switching handles collision resources.
+13. How rover initialization and grounding work.
+14. Files and systems changed.
+15. Tests executed and their actual results.
+16. Whether graphical runtime testing was performed.
+17. Remaining limitations and assumptions.
+
+Clearly distinguish between implemented, tested, and unverified features.
+
+Do not report a feature as completed if it was only partially implemented.
+
+---
+
+# FINAL DIRECTIVE
+
+**READ AND CONSIDER THIS ENTIRE PROMPT. STRICTLY FOLLOW EVERY REQUIREMENT. DO NOT SKIP ANY SECTION.**
+
+The objective is to make Project ARES use a physically correct six-wheel Perseverance rover interacting with an accurately mapped, elevation-aware Mars world.
+
+The wheels must have proper collision geometry. The imported terrain must define the actual physical surface. Rendering, collision, elevation, coordinate systems, and rover physics must all agree.
+
+Implement the complete solution. Build the application. Run the tests. Inspect the actual runtime behaviour. Fix all discovered problems and repeat testing until the desired result is achieved.
+
+Do not wait for input. Do not stop after analysis. Do not sacrifice existing working functionality to produce a superficial fix.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-11-22T04:00:08+05:30.
+</ADDITIONAL_METADATA>

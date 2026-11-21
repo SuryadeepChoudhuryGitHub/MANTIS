@@ -274,8 +274,8 @@ inline Vec3 getCenterOfMassLocal(const VehicleConfig& config) {
 inline double computeEquilibriumChassisHeight(const VehicleConfig& config) {
     if (config.useRockerBogie) {
         // Authentic Mars rover ground clearance to chassis center:
-        // Wheel hub rests at wheelRadius; chassis sits 0.22m above hub
-        return config.wheelRadius + 0.22;
+        // Wheel hub rests at wheelRadius; chassis sits 0.210m above hub
+        return config.wheelRadius + 0.210;
     }
     const double totalStiffness = 2.0 * (config.frontSpringStiffness + config.rearSpringStiffness);
     const double avgCompression = (config.mass * GRAVITY) / totalStiffness;

@@ -1,6 +1,7 @@
 #include "physics/PhysicsWorld.h"
 #include <chrono>
 #include <cmath>
+#include "terrain/TerrainManager.h"
 
 namespace torquelab {
 
@@ -512,17 +513,28 @@ void PhysicsWorld::teleportToPreset(const SpawnPreset& preset) {
 
     // Dynamically detect ground surface elevation beneath the spawn coordinates
     double groundY = preset.position.y;
-    const double rayStartY = std::max(preset.position.y + 120.0, 200.0);
-    const double rayEndY   = std::min(preset.position.y - 120.0, -200.0);
-    const auto hit = raycastWorld(
-        Vec3{preset.position.x, rayStartY, preset.position.z},
-        Vec3{preset.position.x, rayEndY,   preset.position.z}
-    );
-    if (hit.hasHit) {
-        groundY = hit.pointWorld.y;
+    bool foundGround = false;
+    if (m_terrainManager) {
+        double elev = 0.0;
+        Vec3 norm{0.0, 1.0, 0.0};
+        if (m_terrainManager->getElevationAt(preset.position.x, preset.position.z, elev, norm)) {
+            groundY = elev;
+            foundGround = true;
+        }
+    }
+    if (!foundGround) {
+        const double rayStartY = std::max(preset.position.y + 120.0, 200.0);
+        const double rayEndY   = std::min(preset.position.y - 120.0, -200.0);
+        const auto hit = raycastWorld(
+            Vec3{preset.position.x, rayStartY, preset.position.z},
+            Vec3{preset.position.x, rayEndY,   preset.position.z}
+        );
+        if (hit.hasHit) {
+            groundY = hit.pointWorld.y;
+        }
     }
 
-    const Vec3 spawnPos{preset.position.x, groundY + eqHeight + 0.06, preset.position.z};
+    const Vec3 spawnPos{preset.position.x, groundY + eqHeight, preset.position.z};
     vehicle->resetVehicle(&spawnPos, &rot);
     accumulator = 0.0;
 }
@@ -555,6 +567,10 @@ void PhysicsWorld::switchVehicle(const VehicleConfig& newConfig, const Generated
         curRot,
         collision
     );
+
+    if (m_terrainManager) {
+        vehicle->setTerrainManager(m_terrainManager);
+    }
 
     vehicle->body.setLinearVelocity(curLinVel);
     vehicle->body.setAngularVelocity(curAngVel);

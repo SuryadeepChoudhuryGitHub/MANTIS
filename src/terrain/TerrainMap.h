@@ -11,6 +11,7 @@
 #include <vector>
 #include "physics/Math3D.h"
 #include "physics/PlanetaryEnvironment.h"
+#include "physics/SurfaceSystem.h"
 
 namespace torquelab {
 
@@ -23,6 +24,17 @@ struct TerrainSpawnPoint {
     std::string description;
     Vec3 position{0.0, 0.55, 0.0};
     double yawDeg{0.0};
+};
+
+struct TerrainContactInfo {
+    bool hasContact{false};
+    double elevation{0.0};
+    Vec3 surfaceNormal{0.0, 1.0, 0.0};
+    Vec3 contactPointWorld{0.0, 0.0, 0.0};
+    SurfaceType surfaceType{SurfaceType::MarsRegolith};
+    double penetrationDepth{0.0};
+    bool isInsidePlayableBounds{true};
+    double slopeAngleRad{0.0};
 };
 
 enum class TerrainResolutionLevel {
@@ -51,6 +63,32 @@ public:
      * Builds the visual rendering meshes and PBR materials in TrackRendererGL.
      */
     virtual bool buildGraphics(TrackRendererGL& renderer) = 0;
+
+    /**
+     * Authoritative elevation and surface normal query at world coordinates (worldX, worldZ).
+     * Returns true if coordinates are within valid terrain bounds; outElevation and outNormal are set.
+     */
+    virtual bool getElevationAt(double worldX, double worldZ, double& outElevation, Vec3& outNormal) const = 0;
+
+    /**
+     * Returns surface material/regolith classification at (worldX, worldZ).
+     */
+    virtual SurfaceType getSurfaceMaterialAt(double worldX, double worldZ) const = 0;
+
+    /**
+     * Checks whether world coordinates (worldX, worldZ) are inside the active playable terrain area.
+     */
+    virtual bool isPositionInsidePlayableTerrain(double worldX, double worldZ) const = 0;
+
+    /**
+     * Evaluates volumetric or point wheel-ground contact at world position.
+     */
+    virtual TerrainContactInfo getTerrainContactAt(const Vec3& worldPos, double probeRadius = 0.0) const = 0;
+
+    /**
+     * Queries authoritative terrain surface along a line ray from rayOrigin in direction rayDir.
+     */
+    virtual bool queryRayContact(const Vec3& rayOrigin, const Vec3& rayDir, double maxDistance, TerrainContactInfo& outContact) const = 0;
 };
 
 } // namespace torquelab

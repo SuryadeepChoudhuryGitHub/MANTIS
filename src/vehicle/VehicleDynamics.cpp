@@ -509,7 +509,7 @@ void VehicleDynamics::syncWheelCollisionObjects() {
     for (int i = 0; i < nWheels; ++i) {
         if (!m_wheelCollisionObjects[static_cast<size_t>(i)]) continue;
         const WheelState& w = wheels[static_cast<size_t>(i)];
-        const Quat wRot = computeWheelWorldOrientation(chassisRot, w);
+        const Quat wRot = (config.useRockerBogie) ? w.worldOrientation : computeWheelWorldOrientation(chassisRot, w);
         btTransform wt;
         wt.setIdentity();
         wt.setOrigin(toBtVec3(w.wheelCenterWorld));
@@ -580,7 +580,8 @@ void VehicleDynamics::step(double dt) {
             m_surfaceSystem,
             wheels,
             currentInputs.steering,
-            wheelObjsToIgnore
+            wheelObjsToIgnore,
+            m_terrainManager
         );
 
         // 2. Apply vertical suspension normal load forces at wheel mounts
@@ -1139,7 +1140,24 @@ void VehicleDynamics::step(double dt) {
         }
 
         w.rotationAngle += w.angularVelocity * dt;
-        w.worldOrientation = computeWheelWorldOrientation(chassisRot, w);
+        if (!config.useRockerBogie) {
+            w.worldOrientation = computeWheelWorldOrientation(chassisRot, w);
+        } else {
+            const Quat spinQ = quatFromAxisAngle(Vec3{1.0, 0.0, 0.0}, w.rotationAngle);
+            if (i == 0) {
+                w.worldOrientation = quatMultiply(rockerBogie.getState().knuckleOrientationsWorld[0], spinQ);
+            } else if (i == 1) {
+                w.worldOrientation = quatMultiply(rockerBogie.getState().knuckleOrientationsWorld[1], spinQ);
+            } else if (i == 2) {
+                w.worldOrientation = quatMultiply(rockerBogie.getState().knuckleOrientationsWorld[2], spinQ);
+            } else if (i == 3) {
+                w.worldOrientation = quatMultiply(rockerBogie.getState().knuckleOrientationsWorld[3], spinQ);
+            } else if (i == 4) {
+                w.worldOrientation = quatMultiply(rockerBogie.getState().leftBogieOrientationWorld, spinQ);
+            } else if (i == 5) {
+                w.worldOrientation = quatMultiply(rockerBogie.getState().rightBogieOrientationWorld, spinQ);
+            }
+        }
 
         w.slipRatio = lastTireOut.slipRatio;
         w.slipAngle = lastTireOut.slipAngle;

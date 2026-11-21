@@ -41,6 +41,18 @@ enum class ModelPartRole {
     BrakeCaliper_RL, // Rear-Left brake caliper (non-steering, does not rotate)
     BrakeCaliper_RR, // Rear-Right brake caliper (non-steering, does not rotate)
     SteeringWheel,   // Interior steering wheel (rotates around steering axis)
+    Rover_DiffBar,   // Mars Rover top differential pivot bar
+    Rover_DiffLink_L,// Mars Rover differential drop link left
+    Rover_DiffLink_R,// Mars Rover differential drop link right
+    Rover_Rocker_L,  // Mars Rover main rocker arm left
+    Rover_Rocker_R,  // Mars Rover main rocker arm right
+    Rover_Bogie_L,   // Mars Rover rear bogie arm left
+    Rover_Bogie_R,   // Mars Rover rear bogie arm right
+    Rover_Knuckle_FL,// Mars Rover steering knuckle front-left
+    Rover_Knuckle_FR,// Mars Rover steering knuckle front-right
+    Rover_Knuckle_RL,// Mars Rover steering knuckle rear-left
+    Rover_Knuckle_RR,// Mars Rover steering knuckle rear-right
+    Rover_Suspension_All, // Mars Rover suspension node (auto-partitioned)
     Ignore           // Studio ground planes, lights, cameras, etc.
 };
 
@@ -99,6 +111,17 @@ struct LoadedVehicleModel {
     std::array<std::vector<LoadedModelPart>, 6> wheelParts; // 0=FL, 1=FR, 2=RL, 3=RR, 4=ML, 5=MR
     std::array<std::vector<LoadedModelPart>, 6> caliperParts;
     std::vector<LoadedModelPart> steeringWheelParts;
+
+    // Authentic NASA Perseverance / Rocker-Bogie kinematic suspension components
+    bool isRover{false};
+    std::vector<LoadedModelPart> roverDiffBarParts;
+    std::vector<LoadedModelPart> roverDiffLinkPartsLeft;
+    std::vector<LoadedModelPart> roverDiffLinkPartsRight;
+    std::vector<LoadedModelPart> roverRockerPartsLeft;
+    std::vector<LoadedModelPart> roverRockerPartsRight;
+    std::vector<LoadedModelPart> roverBogiePartsLeft;
+    std::vector<LoadedModelPart> roverBogiePartsRight;
+    std::array<std::vector<LoadedModelPart>, 4> roverKnuckleParts; // 0=FL, 1=FR, 2=RL, 3=RR
 
     size_t totalVertices{0};
     size_t totalTriangles{0};

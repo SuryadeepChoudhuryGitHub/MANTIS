@@ -15,6 +15,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <queue>
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -817,11 +818,12 @@ bool ModelLoaderGLB::loadFromFile(
                     } else {
                         role = (localPos.x >= 0.0) ? ModelPartRole::BrakeCaliper_RL : ModelPartRole::BrakeCaliper_RR;
                     }
-                } else if (lowerName.find("wheel") != std::string::npos ||
-                           lowerName.find("tire") != std::string::npos ||
-                           lowerName.find("tyre") != std::string::npos ||
-                           lowerName.find("rim") != std::string::npos ||
-                           lowerName.find("hubcap") != std::string::npos) {
+                } else if ((lowerName.find("wheel") != std::string::npos ||
+                            lowerName.find("tire") != std::string::npos ||
+                            lowerName.find("tyre") != std::string::npos ||
+                            lowerName.find("rim") != std::string::npos ||
+                            lowerName.find("hubcap") != std::string::npos) &&
+                           lowerName.find("rimfax") == std::string::npos) {
                     // Check if geometry spans multiple quadrants (merged wheel mesh across left/right or front/rear)
                     if ((primMin.x < -0.35 && primMax.x > 0.35) || (primMin.z < -0.35 && primMax.z > 0.35)) {
                         role = ModelPartRole::Wheel_All;
@@ -832,6 +834,10 @@ bool ModelLoaderGLB::loadFromFile(
                             role = (localPos.x >= 0.0) ? ModelPartRole::Wheel_RL : ModelPartRole::Wheel_RR;
                         }
                     }
+                } else if (lowerName.find("suspension") != std::string::npos ||
+                           lowerName.find("rocker") != std::string::npos ||
+                           lowerName.find("bogie") != std::string::npos) {
+                    role = ModelPartRole::Rover_Suspension_All;
                 }
             }
 
@@ -955,6 +961,151 @@ bool ModelLoaderGLB::loadFromFile(
                     qPart.wheelLocalScale = Vec3{1.0, 1.0, 1.0};
 
                     rawParts.push_back(std::move(qPart));
+                }
+                continue;
+            }
+
+            if (role == ModelPartRole::Rover_Suspension_All) {
+                outModel.isRover = true;
+                const size_t numTris = indices.size() / 3;
+
+                // Build adjacency / connected components for this suspension primitive
+                auto keyOf = [](const Vec3& p) {
+                    long long qx = static_cast<long long>(std::round(p.x * 1000.0));
+                    long long qy = static_cast<long long>(std::round(p.y * 1000.0));
+                    long long qz = static_cast<long long>(std::round(p.z * 1000.0));
+                    return std::to_string(qx) + "_" + std::to_string(qy) + "_" + std::to_string(qz);
+                };
+
+                std::unordered_map<std::string, std::vector<size_t>> vToTri;
+                vToTri.reserve(numTris * 3);
+                for (size_t t = 0; t < numTris; ++t) {
+                    for (int k = 0; k < 3; ++k) {
+                        const unsigned int idx = indices[t * 3 + k];
+                        const Vec3 pt{vertices[idx].px, vertices[idx].py, vertices[idx].pz};
+                        vToTri[keyOf(pt)].push_back(t);
+                    }
+                }
+
+                std::vector<bool> visited(numTris, false);
+                std::vector<std::vector<size_t>> components;
+                for (size_t t = 0; t < numTris; ++t) {
+                    if (visited[t]) continue;
+                    std::vector<size_t> comp;
+                    std::queue<size_t> q;
+                    q.push(t);
+                    visited[t] = true;
+                    while (!q.empty()) {
+                        size_t curr = q.front();
+                        q.pop();
+                        comp.push_back(curr);
+                        for (int k = 0; k < 3; ++k) {
+                            const unsigned int idx = indices[curr * 3 + k];
+                            const Vec3 pt{vertices[idx].px, vertices[idx].py, vertices[idx].pz};
+                            const auto it = vToTri.find(keyOf(pt));
+                            if (it != vToTri.end()) {
+                                for (size_t nxt : it->second) {
+                                    if (!visited[nxt]) {
+                                        visited[nxt] = true;
+                                        q.push(nxt);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    components.push_back(comp);
+                }
+
+                // Partition each component into the corresponding rover part role
+                for (const auto& comp : components) {
+                    if (comp.empty()) continue;
+                    Vec3 bMin{1e9, 1e9, 1e9}, bMax{-1e9, -1e9, -1e9};
+                    Vec3 sumPos{0, 0, 0};
+                    for (size_t triIdx : comp) {
+                        for (int k = 0; k < 3; ++k) {
+                            const unsigned int idx = indices[triIdx * 3 + k];
+                            const Vec3 pt{vertices[idx].px, vertices[idx].py, vertices[idx].pz};
+                            bMin.x = std::min(bMin.x, pt.x);
+                            bMin.y = std::min(bMin.y, pt.y);
+                            bMin.z = std::min(bMin.z, pt.z);
+                            bMax.x = std::max(bMax.x, pt.x);
+                            bMax.y = std::max(bMax.y, pt.y);
+                            bMax.z = std::max(bMax.z, pt.z);
+                            sumPos = vec3Add(sumPos, pt);
+                        }
+                    }
+                    const double totalVerts = comp.size() * 3.0;
+                    const Vec3 cPos = vec3Scale(sumPos, 1.0 / totalVerts);
+                    const bool isLeft = (cPos.x >= 0.0);
+
+                    ModelPartRole subRole = ModelPartRole::Chassis;
+                    if (bMin.y < 0.35 && bMax.y > 0.40 && std::abs(cPos.x) >= 0.55 && std::abs(cPos.x) <= 0.70 && cPos.z >= 0.15 && cPos.z <= 0.35) {
+                        subRole = isLeft ? ModelPartRole::Rover_DiffLink_L : ModelPartRole::Rover_DiffLink_R;
+                    } else if (bMin.y >= 0.40 || (cPos.y >= 0.38 && std::abs(cPos.x) < 0.70)) {
+                        subRole = ModelPartRole::Rover_DiffBar;
+                    } else if (cPos.z > 0.95 && std::abs(cPos.x) > 0.65) {
+                        subRole = isLeft ? ModelPartRole::Rover_Knuckle_FL : ModelPartRole::Rover_Knuckle_FR;
+                    } else if (cPos.z < -0.95 && std::abs(cPos.x) > 0.65) {
+                        subRole = isLeft ? ModelPartRole::Rover_Knuckle_RL : ModelPartRole::Rover_Knuckle_RR;
+                    } else {
+                        if (cPos.z <= -0.505 || (cPos.z < 0.10 && cPos.y < -0.10 && std::abs(cPos.x) > 0.85)) {
+                            subRole = isLeft ? ModelPartRole::Rover_Bogie_L : ModelPartRole::Rover_Bogie_R;
+                        } else {
+                            subRole = isLeft ? ModelPartRole::Rover_Rocker_L : ModelPartRole::Rover_Rocker_R;
+                        }
+                    }
+
+                    // Extract vertices and indices for this component
+                    std::vector<VertexPNU> cVerts;
+                    std::vector<unsigned int> cRemappedIndices;
+                    std::unordered_map<unsigned int, unsigned int> remap;
+                    cVerts.reserve(comp.size() * 3);
+                    cRemappedIndices.reserve(comp.size() * 3);
+
+                    for (size_t triIdx : comp) {
+                        for (int k = 0; k < 3; ++k) {
+                            const unsigned int oldIdx = indices[triIdx * 3 + k];
+                            auto it = remap.find(oldIdx);
+                            if (it == remap.end()) {
+                                const unsigned int newIdx = static_cast<unsigned int>(cVerts.size());
+                                remap[oldIdx] = newIdx;
+                                cVerts.push_back(vertices[oldIdx]);
+                                cRemappedIndices.push_back(newIdx);
+                            } else {
+                                cRemappedIndices.push_back(it->second);
+                            }
+                        }
+                    }
+
+                    Mesh cMesh;
+                    if (loadGpuResources) {
+                        cMesh.upload(cVerts, cRemappedIndices);
+                    }
+
+                    RawMeshGeometry cCpu;
+                    cCpu.vertices.reserve(cVerts.size());
+                    for (const auto& vt : cVerts) {
+                        cCpu.addVertex(Vec3{vt.px, vt.py, vt.pz});
+                    }
+                    cCpu.indices = cRemappedIndices;
+
+                    LoadedModelPart cPart{};
+                    cPart.name = nodeName + "_" + std::to_string(static_cast<int>(subRole));
+                    cPart.mesh = std::move(cMesh);
+                    cPart.cpuGeometry = std::move(cCpu);
+                    cPart.localBindMatrix = localBind;
+                    cPart.localPosition = cPos;
+                    cPart.localRotation = quatIdentity();
+                    cPart.localScale = Vec3{1.0, 1.0, 1.0};
+                    cPart.material = matProps;
+                    cPart.role = subRole;
+                    cPart.isBrakeLight = isBrakeLight;
+                    cPart.isReverseLight = isReverseLight;
+                    cPart.isTransparent = isTransparent;
+                    cPart.wheelLocalRotation = quatIdentity();
+                    cPart.wheelLocalScale = Vec3{1.0, 1.0, 1.0};
+
+                    rawParts.push_back(std::move(cPart));
                 }
                 continue;
             }
@@ -1093,6 +1244,28 @@ bool ModelLoaderGLB::loadFromFile(
         } else if (p.role == ModelPartRole::SteeringWheel) {
             outModel.chassisCollisionMesh.appendTransformed(p.cpuGeometry, p.localBindMatrix);
             outModel.steeringWheelParts.push_back(std::move(p));
+        } else if (p.role == ModelPartRole::Rover_DiffBar) {
+            outModel.roverDiffBarParts.push_back(std::move(p));
+        } else if (p.role == ModelPartRole::Rover_DiffLink_L) {
+            outModel.roverDiffLinkPartsLeft.push_back(std::move(p));
+        } else if (p.role == ModelPartRole::Rover_DiffLink_R) {
+            outModel.roverDiffLinkPartsRight.push_back(std::move(p));
+        } else if (p.role == ModelPartRole::Rover_Rocker_L) {
+            outModel.roverRockerPartsLeft.push_back(std::move(p));
+        } else if (p.role == ModelPartRole::Rover_Rocker_R) {
+            outModel.roverRockerPartsRight.push_back(std::move(p));
+        } else if (p.role == ModelPartRole::Rover_Bogie_L) {
+            outModel.roverBogiePartsLeft.push_back(std::move(p));
+        } else if (p.role == ModelPartRole::Rover_Bogie_R) {
+            outModel.roverBogiePartsRight.push_back(std::move(p));
+        } else if (p.role == ModelPartRole::Rover_Knuckle_FL) {
+            outModel.roverKnuckleParts[0].push_back(std::move(p));
+        } else if (p.role == ModelPartRole::Rover_Knuckle_FR) {
+            outModel.roverKnuckleParts[1].push_back(std::move(p));
+        } else if (p.role == ModelPartRole::Rover_Knuckle_RL) {
+            outModel.roverKnuckleParts[2].push_back(std::move(p));
+        } else if (p.role == ModelPartRole::Rover_Knuckle_RR) {
+            outModel.roverKnuckleParts[3].push_back(std::move(p));
         } else {
             // Main chassis body, doors, hood, glass, bumpers, lights, interior, mirrors, trim
             outModel.chassisCollisionMesh.appendTransformed(p.cpuGeometry, p.localBindMatrix);
@@ -1106,7 +1279,7 @@ bool ModelLoaderGLB::loadFromFile(
         outModel.aabbMin = outModel.chassisCollisionMesh.aabbMin;
         outModel.aabbMax = outModel.chassisCollisionMesh.aabbMax;
     }
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 6; ++i) {
         if (!outModel.wheelMeshes[static_cast<size_t>(i)].empty()) {
             outModel.wheelMeshes[static_cast<size_t>(i)].computeBounds();
             const auto& wBounds = outModel.wheelMeshes[static_cast<size_t>(i)];
@@ -1136,6 +1309,14 @@ bool ModelLoaderGLB::loadFromFile(
                     wp.localBindMatrix
                 );
             }
+
+            // Expand model bounding box with wheel bounds
+            outModel.aabbMin.x = std::min(outModel.aabbMin.x, wBounds.aabbMin.x);
+            outModel.aabbMin.y = std::min(outModel.aabbMin.y, wBounds.aabbMin.y);
+            outModel.aabbMin.z = std::min(outModel.aabbMin.z, wBounds.aabbMin.z);
+            outModel.aabbMax.x = std::max(outModel.aabbMax.x, wBounds.aabbMax.x);
+            outModel.aabbMax.y = std::max(outModel.aabbMax.y, wBounds.aabbMax.y);
+            outModel.aabbMax.z = std::max(outModel.aabbMax.z, wBounds.aabbMax.z);
         }
     }
 

@@ -21,6 +21,8 @@
 
 namespace torquelab {
 
+class TerrainManager;
+
 enum class TrackElementKind {
     Ground,
     SurfacePatch,
@@ -163,6 +165,14 @@ public:
     btDiscreteDynamicsWorld* getDynamicsWorld() const { return m_world.get(); }
     size_t getNumStaticColliders() const { return m_staticColliders.size(); }
 
+    void setTerrainManager(TerrainManager* tm) {
+        m_terrainManager = tm;
+        if (vehicle) {
+            vehicle->setTerrainManager(tm);
+        }
+    }
+    TerrainManager* getTerrainManager() const { return m_terrainManager; }
+
     SurfaceSystem surfaceSystem;
     std::vector<TrackBoxElement> trackElements;
     PlanetaryEnvironment environment{createEarthEnvironment()};
@@ -193,6 +203,7 @@ private:
     };
     std::vector<StaticColliderRecord> m_staticColliders;
     int m_nextColliderHandle{1};
+    TerrainManager* m_terrainManager{nullptr};
 };
 
 } // namespace torquelab

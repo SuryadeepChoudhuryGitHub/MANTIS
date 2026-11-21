@@ -337,6 +337,46 @@ void DebugOverlayGL::render(
         }
     }
 
+    // Rocker-Bogie Kinematic Linkage Articulation Overlay (for rovers)
+    if ((showSuspensionTravel || showAlignmentDiagnostics) && vehicle.config.useRockerBogie) {
+        const auto& rb = vehicle.rockerBogie.getState();
+        const Color3 rockerCol = Color3::fromHex(0x38bdf8); // Sky blue
+        const Color3 bogieCol = Color3::fromHex(0xf59e0b);  // Amber
+        const Color3 diffCol = Color3::fromHex(0xa855f7);   // Purple
+        const Color3 knuckleCol = Color3::fromHex(0x10b981);// Emerald green
+
+        // Left Rocker Linkage: Left Pivot -> FL Hub, Left Pivot -> Left Bogie Pivot
+        addLine(rb.leftRockerPivotWorld, rb.wheelHubsWorld[0], rockerCol, lines);
+        addLine(rb.leftRockerPivotWorld, rb.leftBogiePivotWorld, rockerCol, lines);
+
+        // Right Rocker Linkage: Right Pivot -> FR Hub, Right Pivot -> Right Bogie Pivot
+        addLine(rb.rightRockerPivotWorld, rb.wheelHubsWorld[1], rockerCol, lines);
+        addLine(rb.rightRockerPivotWorld, rb.rightBogiePivotWorld, rockerCol, lines);
+
+        // Left Bogie Linkage: Left Bogie Pivot -> ML Hub, Left Bogie Pivot -> RL Hub
+        addLine(rb.leftBogiePivotWorld, rb.wheelHubsWorld[4], bogieCol, lines);
+        addLine(rb.leftBogiePivotWorld, rb.wheelHubsWorld[2], bogieCol, lines);
+
+        // Right Bogie Linkage: Right Bogie Pivot -> MR Hub, Right Bogie Pivot -> RR Hub
+        addLine(rb.rightBogiePivotWorld, rb.wheelHubsWorld[5], bogieCol, lines);
+        addLine(rb.rightBogiePivotWorld, rb.wheelHubsWorld[3], bogieCol, lines);
+
+        // Differential Bar: Across top of chassis connecting to rocker trunnions
+        const Vec3 diffLeft = vec3Add(rb.differentialPivotWorld, quatRotateVec3(rb.differentialOrientationWorld, Vec3{0.638, 0.0, 0.0}));
+        const Vec3 diffRight = vec3Add(rb.differentialPivotWorld, quatRotateVec3(rb.differentialOrientationWorld, Vec3{-0.638, 0.0, 0.0}));
+        addLine(diffLeft, diffRight, diffCol, lines);
+        addLine(diffLeft, rb.leftRockerPivotWorld, diffCol, lines);
+        addLine(diffRight, rb.rightRockerPivotWorld, diffCol, lines);
+
+        // Steering Kingpin Axes (Cyan/Green vertical line at each corner hub)
+        for (int k = 0; k < 4; ++k) {
+            const int wIdx = (k == 0) ? 0 : (k == 1 ? 1 : (k == 2 ? 2 : 3));
+            const Vec3& hub = rb.wheelHubsWorld[static_cast<size_t>(wIdx)];
+            const Vec3 steerUp = quatRotateVec3(rb.knuckleOrientationsWorld[static_cast<size_t>(k)], Vec3{0.0, 0.25, 0.0});
+            addLine(vec3Sub(hub, steerUp), vec3Add(hub, steerUp), knuckleCol, lines);
+        }
+    }
+
     // Alignment & Fender Clearance Diagnostics (Draws clearance indicator from chassis outer edge to wheel)
     if (showAlignmentDiagnostics) {
         const double halfChassisWidth = vehicle.config.chassisHalfExtents.x;

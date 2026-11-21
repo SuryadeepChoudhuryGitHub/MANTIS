@@ -129,6 +129,12 @@ add_library(TorqueLabPhysics STATIC
     src/renderer/ModelLoaderGLB.cpp
     src/renderer/VehicleAssetValidator.cpp
     src/renderer/GpuHardwareInfo.cpp
+    src/renderer/Shader.cpp
+    src/renderer/EnvironmentMapGL.cpp
+    src/renderer/SkyRendererGL.cpp
+    src/renderer/ShadowMapFBO.cpp
+    src/renderer/TrackRendererGL.cpp
+    src/terrain/TerrainManager.cpp
     src/vehicle/VehicleConfig.cpp
     src/vehicle/SuspensionSystem.cpp
     src/vehicle/TireModel.cpp
@@ -174,13 +180,7 @@ endif()
 add_executable(ProjectARES
     src/app/main.cpp
     src/app/Application.cpp
-    src/terrain/TerrainManager.cpp
-    src/renderer/Shader.cpp
-    src/renderer/EnvironmentMapGL.cpp
-    src/renderer/SkyRendererGL.cpp
-    src/renderer/ShadowMapFBO.cpp
     src/renderer/VehicleRendererGL.cpp
-    src/renderer/TrackRendererGL.cpp
     src/renderer/DebugOverlayGL.cpp
     src/renderer/CameraControllerGL.cpp
     src/input/ControllerConfig.cpp
