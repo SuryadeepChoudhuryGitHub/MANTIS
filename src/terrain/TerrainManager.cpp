@@ -426,8 +426,8 @@ public:
                         v.nx = static_cast<float>(norm.x);
                         v.ny = static_cast<float>(norm.y);
                         v.nz = static_cast<float>(norm.z);
-                        v.u = static_cast<float>(c) / static_cast<float>(cols - 1) * 32.0f;
-                        v.v = static_cast<float>(r) / static_cast<float>(rows - 1) * 32.0f;
+                        v.u = static_cast<float>(c) * 0.25f;
+                        v.v = static_cast<float>(r) * 0.25f;
                         chunkVertices.push_back(v);
                     }
                 }
@@ -472,7 +472,7 @@ public:
         }
 
         const auto env = getEnvironment();
-        renderer.buildEnvironmentTerrain(env.groundHazeColor);
+        renderer.buildEnvironmentTerrain(env.groundHazeColor, 512.0f, m_minHeight - 2.0f);
         return true;
     }
 

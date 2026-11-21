@@ -38,15 +38,15 @@ public:
         const Mat4& viewProj
     );
 
-    bool enabled{true};
-    bool showCollisionWireframe{true};
-    bool showWheelColliders{true};
-    bool showWheelAxes{true};
-    bool showSuspensionTravel{true};
-    bool showContactForces{true};
-    bool showAlignmentDiagnostics{true};
-    bool showTireDeformation{true};
-    bool showContactPatchSamples{true};
+    bool enabled{false};
+    bool showCollisionWireframe{false};
+    bool showWheelColliders{false};
+    bool showWheelAxes{false};
+    bool showSuspensionTravel{false};
+    bool showContactForces{false};
+    bool showAlignmentDiagnostics{false};
+    bool showTireDeformation{false};
+    bool showContactPatchSamples{false};
 
 private:
     struct LineVertex {

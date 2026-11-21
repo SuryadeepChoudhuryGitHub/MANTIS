@@ -22,6 +22,7 @@
 #include "vehicle/Aerodynamics.h"
 #include "vehicle/BrakeSystem.h"
 #include "vehicle/Drivetrain.h"
+#include "vehicle/RockerBogieSuspension.h"
 #include "vehicle/SteeringSystem.h"
 #include "vehicle/SuspensionSystem.h"
 #include "vehicle/TireModel.h"
@@ -79,7 +80,7 @@ struct VehicleTelemetrySnapshot {
     double steeringAngleRad{0.0};
     DrivetrainTelemetry drivetrain{};
     AeroForceOutput aero{};
-    std::array<WheelState, 4> wheels{};
+    std::array<WheelState, 6> wheels{};
     Vec3 forwardDirWorld{0.0, 0.0, 1.0};
     Vec3 upDirWorld{0.0, 1.0, 0.0};
     Vec3 lateralDirWorld{1.0, 0.0, 0.0};
@@ -92,8 +93,8 @@ struct VehicleTelemetrySnapshot {
 struct InterpolatedVehicleTransforms {
     Vec3 chassisPosition{0.0, 0.0, 0.0};
     Quat chassisRotation{0.0, 0.0, 0.0, 1.0};
-    std::array<Vec3, 4> wheelPositions{};
-    std::array<Quat, 4> wheelRotations{};
+    std::array<Vec3, 6> wheelPositions{};
+    std::array<Quat, 6> wheelRotations{};
 };
 
 class VehicleDynamics {
@@ -141,20 +142,21 @@ public:
 
     /** Access to the 4 physical Bullet collision shapes and objects representing the wheels */
     const btCollisionObject* getWheelCollisionObject(int i) const {
-        return (i >= 0 && i < 4) ? m_wheelCollisionObjects[static_cast<size_t>(i)].get() : nullptr;
+        return (i >= 0 && i < 6) ? m_wheelCollisionObjects[static_cast<size_t>(i)].get() : nullptr;
     }
     const btCylinderShapeX* getWheelCylinderShape(int i) const {
-        return (i >= 0 && i < 4) ? m_wheelCylinderShapes[static_cast<size_t>(i)].get() : nullptr;
+        return (i >= 0 && i < 6) ? m_wheelCylinderShapes[static_cast<size_t>(i)].get() : nullptr;
     }
 
     VehicleConfig config;
     VehicleBody body;
-    std::array<WheelState, 4> wheels;
+    std::array<WheelState, 6> wheels;
     DrivetrainState drivetrain;
     double centerSteeringAngle{0.0};
     AeroForceOutput aeroState{};
     double simTime{0.0};
     VehicleControlInputs currentInputs{};
+    RockerBogieSuspension rockerBogie{};
 
 private:
     Quat computeWheelWorldOrientation(const Quat& chassisRot, const WheelState& w) const;
@@ -165,15 +167,15 @@ private:
     Vec3 m_initialSpawnPos{0.0, 0.55, 0.0};
     Quat m_initialSpawnRot{0.0, 0.0, 0.0, 1.0};
 
-    // Dedicated 3D physical collision shapes and objects representing the 4 vehicle wheels
-    std::array<std::unique_ptr<btCylinderShapeX>, 4> m_wheelCylinderShapes;
-    std::array<std::unique_ptr<btCollisionObject>, 4> m_wheelCollisionObjects;
+    // Dedicated 3D physical collision shapes and objects representing the vehicle wheels
+    std::array<std::unique_ptr<btCylinderShapeX>, 6> m_wheelCylinderShapes;
+    std::array<std::unique_ptr<btCollisionObject>, 6> m_wheelCollisionObjects;
 
     Vec3 m_prevChassisPos{0.0, 0.0, 0.0};
     Quat m_prevChassisRot{0.0, 0.0, 0.0, 1.0};
-    std::array<Vec3, 4> m_prevWheelPos{};
-    std::array<Quat, 4> m_prevWheelRot{};
-    std::array<bool, 4> m_prevWheelInContact{true, true, true, true};
+    std::array<Vec3, 6> m_prevWheelPos{};
+    std::array<Quat, 6> m_prevWheelRot{};
+    std::array<bool, 6> m_prevWheelInContact{true, true, true, true, true, true};
 
     mutable CollisionImpactEvent m_latchedCollision{};
     mutable SuspensionHapticEvent m_latchedSuspension{};

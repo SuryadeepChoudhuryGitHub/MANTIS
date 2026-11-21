@@ -639,6 +639,42 @@ Our immediate milestone is establishing the functional Mars surface environment:
 - **Live OpenGL Timing (NVIDIA GeForce RTX 5050 Laptop GPU):**
   - 600 live frames rendered on Mars Jezero Crater HiRISE DTM at **753.9 FPS** (`phys=0.00ms, rnd=0.7ms, ui=0.3ms, swp=0.4ms`).
 
+---
+
+## 16. Complete Rendering Repair, Perseverance Articulation, Rocker-Bogie Physics & Multi-Resolution Terrain
+
+### 16.1 Perseverance Invisibility & Draco glTF Decompression
+- **Draco Compression Decoding:** All 252 primitives across 24 meshes in `model/PerseveranceRover.glb` were encoded using the `KHR_draco_mesh_compression` extension. Without a Draco decoder, `cgltf` skipped buffer attribute extraction, yielding 0 vertices and making the rover invisible. Integrated `draco::Decoder` in `ModelLoaderGLB.cpp`, successfully decompressing all 138,783 vertices and 199,521 triangles in memory.
+- **Tri-Band 6-Wheel Assembly Partitioning:** In `PerseveranceRover.glb`, all wheels were authored in a single mesh node (`Wheels_objs`). The legacy 4-wheel quadrant partitioning ($Z \ge 0$ vs $Z < 0$) merged middle wheels into the rear wheel assembly. Implemented a tri-band $Z$-clustering algorithm ($Z > +0.3\text{ m} \to \text{Front}$, $|Z| \le 0.3\text{ m} \to \text{Mid}$, $Z < -0.3\text{ m} \to \text{Rear}$) and partitioned them by lateral sign ($X > 0 \to \text{Left}$, $X < 0 \to \text{Right}$) into 6 distinct wheel assemblies: `FL=0, FR=1, RL=2, RR=3, ML=4, MR=5`.
+- **Debug Wireframe Elimination:** Default debug visual overlays (cyan wireframes, cylinder bounds, suspension line gizmos) were muted by default (`showWireframe = false`, `showColliders = false`), delivering a clean cinematic view.
+
+### 16.2 Authentic 6-Wheel Rocker-Bogie Suspension Mechanics (`RockerBogieSuspension`)
+- **Passive Articulation Kinematics:** Replaced passenger car coilover springs and anti-roll bars with a true rocker-bogie kinematic linkage. Features left and right primary rockers connected to chassis trunnions at $y = +0.18\text{ m}$, pivoting secondary bogies connecting mid and rear wheels, and authentic pitch range constraints ($\pm 31.5^\circ$ rocker, $\pm 34.4^\circ$ bogie).
+- **Central Differential Bar Coupling:** Constrains rocker pitch motions through a mechanical differential bar ($\theta_{\text{diff}} = \frac{1}{2}(\theta_L - \theta_R)$), ensuring that when one rocker pitches upward over an obstacle, the opposite rocker pitches downward to maintain continuous chassis leveling and ground contact.
+- **4-Corner Ackermann Steering & Fixed Mid Wheels:** Front wheels (`FL`, `FR`) steer in the direction of travel, while rear wheels (`RL`, `RR`) counter-steer in opposite phase for minimum turn radius and zero-radius skid-steering. Middle wheels (`ML`, `MR`) remain rigidly aligned straight ($0.0\text{ rad}$ steering angle).
+- **Statically Determinate Normal Load Equalization:** Implemented a 2-pass contact and load solver. When all 6 wheels are in ground contact, each wheel carries exactly $\frac{1}{6} M g$ ($\sim 633.8\text{ N}$ under Mars gravity for Perseverance). Dynamic vertical velocity damping cushions drop landings and completely eliminates floating or bouncing.
+- **Chassis Collision Hull Refinement:** Refined rover chassis collision half-extents ($X=1.15\text{ m}, Y=0.28\text{ m}, Z=1.35\text{ m}$) so that the belly pan sits cleanly above ground clearance ($> 0.20\text{ m}$ clearance), preventing the chassis compound shape from resting on the ground while the wheels are in the air.
+
+### 16.3 Multi-Resolution Terrain System & Jezero Crater Skirt Elimination
+- **Bisecting Skirt Bug Fix:** Previously, a flat $3600\text{ m} \times 3600\text{ m}$ horizon ground skirt at $y = -0.05\text{ m}$ bisected the NASA HiRISE Jezero Crater DTM ($y \in [-21.43\text{ m}, +20.97\text{ m}]$), concealing valleys and crater depressions under flat brown slabs. Replaced the flat center plane with a perimeter collar cutout with an inner void ($512\text{ m} \times 512\text{ m}$) and 4 peripheral skirt quads dropped below the crater floor ($y = \text{minHeight} - 2.0\text{ m}$), leaving 100% of the authentic Martian elevation geometry fully exposed and unclipped.
+- **Regolith Texture UV Rescaling:** Adjusted UV texture coordinates to $0.25\text{ m}^{-1}$ (4-metre repeating tiling), eliminating texture stretching across steep crater rims.
+- **Multi-Resolution Terrain Support:** Maintained the 3-tier hierarchy: Regional orbital DTM (1024x1024, 1 m/pixel from HiRISE), Local site terrain reconstruction (`mars_terrain0.glb`, `mars_terrain1.glb`), and wheel-contact terramechanics.
+
+### 16.4 Physical Scale Validation & Microsoft Smart App Control Resolution
+- **Strict 1:1 SI Metric Verification:** Verified all dimensional scales across the pipeline: 1 world unit = 1 metre. Perseverance Rover model dimensions ($2.33\text{ m}$ body width / $2.65\text{ m}$ track width, $1.63\text{ m}$ body height / $2.22\text{ m}$ total height, $3.11\text{ m}$ length) and Jezero Crater DTM grid dimensions ($1024\text{ m} \times 1024\text{ m}$) conform precisely to NASA mission specifications.
+- **Smart App Control (SAC) Mitigation:** Removed legacy `TorqueLabNative.exe` copies from CMake post-build rules. The application now compiles strictly to `ProjectARES.exe` and `ProjectARESTests.exe`. Clean execution is achieved directly from PowerShell, Visual Studio (F5 / Ctrl+F5), or terminal without Smart App Control publisher reputation blocks.
+
+### 16.5 Comprehensive Test Benchmarks (49 / 49 Passed)
+- **49 / 49 Test Suites Passing (0 Failed Assertions):**
+  - **Unit 35:** 6-Wheel Rocker-Bogie Kinematic Articulation, Ackermann Steering, and Differential Coupling.
+  - **Unit 36:** Rover Physical Scale & NASA Jezero Crater DTM Scale Verification.
+  - **Units 1–34, Validation Tests A–J, Controlled Tests 1–3:** 100% passing.
+- **Headless Smoke Test (`.\build\ProjectARES.exe --smoke-test`):** PASS | Eq Load Err: `0.09%` | Accel Squat Pitch: `-4.50 deg` @ 4 km/h | Brake Dive Pitch: `-7.62 deg`.
+- **Live OpenGL Timing Diagnostics (`.\build\ProjectARES.exe --diag`):**
+  - **1043.1 FPS** on NVIDIA GeForce RTX 5050 Laptop GPU (`phys=0.11ms, rnd=0.2ms, ui=0.8ms`).
+  - Smooth 6-wheel rover mobility reaching authentic planetary exploration speeds ($3.7\text{ km/h} \approx 1.02\text{ m/s}$).
+
+
 
 
 

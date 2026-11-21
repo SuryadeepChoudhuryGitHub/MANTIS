@@ -17,6 +17,7 @@ struct WheelState {
     std::string id{"FL"};
     bool isFront{true};
     bool isLeft{true};
+    bool isMid{false};
 
     // --- Geometry & Volumetric Physical Tyre Contact ---
     double wheelRadius{0.32};               // Outer radius of tyre circumference (m)
@@ -84,15 +85,17 @@ inline WheelState createInitialWheelState(
     double rimRadius = 0.22,
     double nominalPressureKpa = 220.0
 ) {
-    static const char* const ids[4] = {"FL", "FR", "RL", "RR"};
+    static const char* const ids[6] = {"FL", "FR", "RL", "RR", "ML", "MR"};
     const bool isFront = (index == 0 || index == 1);
-    const bool isLeft = (index == 0 || index == 2);
+    const bool isLeft = (index == 0 || index == 2 || index == 4);
+    const bool isMid = (index == 4 || index == 5);
 
     WheelState w{};
     w.index = index;
-    w.id = (index >= 0 && index < 4) ? ids[index] : "FL";
+    w.id = (index >= 0 && index < 6) ? ids[index] : "FL";
     w.isFront = isFront;
     w.isLeft = isLeft;
+    w.isMid = isMid;
     w.wheelRadius = wheelRadius;
     w.wheelWidth = wheelWidth;
     w.mountPointLocal = mountLocal;

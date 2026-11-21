@@ -301,7 +301,8 @@ void validationTestA_StaticEquilibrium() {
                 totalNormalLoad, expectedWeight, relErr * 100.0, snap.chassisPosition.y, snap.wheels[0].compression);
 
     EXPECT_LT(relErr, 0.015);
-    for (const auto& w : snap.wheels) {
+    for (int i = 0; i < config.numWheels; ++i) {
+        const auto& w = snap.wheels[static_cast<size_t>(i)];
         EXPECT_TRUE(w.inContact);
         EXPECT_GT(w.compression, 0.08);
         EXPECT_LT(w.compression, 0.16);
@@ -1960,7 +1961,8 @@ void unitTest29_HummerOffRoadVehiclePhysicsAndCollisionDerivation() {
 
     const VehicleTelemetrySnapshot snap = world.vehicle->getTelemetrySnapshot();
     double totalFz = 0.0;
-    for (const auto& w : snap.wheels) {
+    for (int i = 0; i < hummer.numWheels; ++i) {
+        const auto& w = snap.wheels[static_cast<size_t>(i)];
         totalFz += w.normalLoad;
         EXPECT_TRUE(w.inContact);
         // Each wheel supports ~7 kN of normal load
@@ -2073,7 +2075,8 @@ void unitTest31_PlanetaryEnvironmentAndMarsSurfacePhysics() {
     // Verify Static Equilibrium under Mars gravity: Total normal load sum(Fz) ~= m * 3.71
     const VehicleTelemetrySnapshot marsSnap = marsWorld.vehicle->getTelemetrySnapshot();
     double totalFzMars = 0.0;
-    for (const auto& w : marsSnap.wheels) {
+    for (int i = 0; i < bmw.numWheels; ++i) {
+        const auto& w = marsSnap.wheels[static_cast<size_t>(i)];
         totalFzMars += w.normalLoad;
         EXPECT_TRUE(w.inContact);
     }
@@ -2207,7 +2210,7 @@ void unitTest33_MarsRoverDrivetrainAndSuspensionPhysics() {
     PhysicsWorld world(persev, false, nullptr);
     world.setEnvironment(marsEnv);
 
-    const Vec3 spawnPos{0.0, 0.65, 0.0};
+    const Vec3 spawnPos{0.0, 0.49, 0.0};
     world.vehicle->resetVehicle(&spawnPos);
     for (int i = 0; i < 200; ++i) {
         world.stepFixed();
@@ -2270,6 +2273,110 @@ void unitTest34_MapSwitchingLifecycleAndResourceIntegrity() {
     }
 }
 
+void unitTest35_SixWheelRockerBogieKinematicsAndDifferentialCoupling() {
+    const VehicleConfig rover = createMarsRoverConfig();
+    EXPECT_EQ(rover.numWheels, 6);
+    EXPECT_TRUE(rover.isSixWheeled);
+    EXPECT_TRUE(rover.useRockerBogie);
+
+    const PlanetaryEnvironment marsEnv = createMarsEnvironment();
+    PhysicsWorld world(rover, false, nullptr);
+    world.setEnvironment(marsEnv);
+
+    // 1. Verify 4-Corner Ackermann Steering & Non-steered Mid Wheels
+    world.vehicle->currentInputs.steering = 0.5; // Turn left
+    world.vehicle->step(1.0 / 120.0);
+
+    const auto& wheels = world.vehicle->wheels;
+    EXPECT_GT(wheels[0].steeringAngle, 0.05); // FL steered left
+    EXPECT_GT(wheels[1].steeringAngle, 0.05); // FR steered left
+    EXPECT_LT(wheels[2].steeringAngle, -0.05); // RL counter-steered right
+    EXPECT_LT(wheels[3].steeringAngle, -0.05); // RR counter-steered right
+    EXPECT_NEAR(wheels[4].steeringAngle, 0.0, 1e-6); // ML rigidly straight (0.0 rad)
+    EXPECT_NEAR(wheels[5].steeringAngle, 0.0, 1e-6); // MR rigidly straight (0.0 rad)
+
+    // 2. Settle on flat ground and verify Equal 6-Wheel Normal Load Distribution
+    world.vehicle->currentInputs.steering = 0.0;
+    const Vec3 spawnPos{0.0, 0.49, 0.0};
+    world.vehicle->resetVehicle(&spawnPos);
+
+    for (int i = 0; i < 200; ++i) {
+        world.stepFixed();
+    }
+
+    const VehicleTelemetrySnapshot snap = world.vehicle->getTelemetrySnapshot();
+    const double totalWeightMars = rover.mass * marsEnv.gravity; // 1025 kg * 3.71 m/s^2 = 3802.75 N
+    const double expectedPerWheelLoad = totalWeightMars / 6.0;    // ~633.79 N
+
+    double totalMeasuredFz = 0.0;
+    for (size_t i = 0; i < 6; ++i) {
+        const auto& w = snap.wheels[i];
+        EXPECT_TRUE(w.inContact);
+        EXPECT_GT(w.normalLoad, expectedPerWheelLoad * 0.70);
+        EXPECT_LT(w.normalLoad, expectedPerWheelLoad * 1.30);
+        totalMeasuredFz += w.normalLoad;
+    }
+
+    const double errPct = (std::abs(totalMeasuredFz - totalWeightMars) / totalWeightMars) * 100.0;
+    EXPECT_LT(errPct, 0.20); // Settled within 0.2% of Mars rover gravitational weight
+
+    // 3. Verify Central Differential Bar Coupling Angle
+    const auto& rbState = world.vehicle->rockerBogie.getState();
+    const double diffAngle = rbState.differentialAngle;
+    const double expectedDiff = 0.5 * (rbState.leftRockerPitch - rbState.rightRockerPitch);
+    EXPECT_NEAR(diffAngle, expectedDiff, 1e-4);
+}
+
+void unitTest36_RoverPhysicalScaleAndHiRISEDtmElevationScale() {
+    // 1. Verify Perseverance 3D Model Dimensional Scale (SI 1:1 Metres)
+    const std::string roverPath = ResourcePath::resolve("model/PerseveranceRover.glb");
+    EXPECT_TRUE(std::filesystem::exists(roverPath));
+
+    LoadedVehicleModel roverModel{};
+    EXPECT_TRUE(ModelLoaderGLB::loadFromFile(roverPath, roverModel, "", false));
+    EXPECT_GT(roverModel.totalVertices, 100000);
+    EXPECT_GT(roverModel.totalTriangles, 150000);
+
+    // Model bounding box dimensions in model space (meters)
+    const double modelDx = roverModel.aabbMax.x - roverModel.aabbMin.x;
+    const double modelDy = roverModel.aabbMax.y - roverModel.aabbMin.y;
+    const double modelDz = roverModel.aabbMax.z - roverModel.aabbMin.z;
+
+    // NASA Perseverance physical dimensions: ~2.7m wide, ~2.2m high (with wheels/mast), ~3.0m long
+    // Body mesh bounds: dx ~ 2.33m, dy ~ 1.63m, dz ~ 3.11m
+    EXPECT_GT(modelDx, 2.20);
+    EXPECT_LT(modelDx, 3.10);
+    EXPECT_GT(modelDy, 1.50);
+    EXPECT_LT(modelDy, 2.40);
+    EXPECT_GT(modelDz, 2.50);
+    EXPECT_LT(modelDz, 3.40);
+
+    // 2. Verify NASA HiRISE Jezero Crater DTM Elevation Scale
+    const std::string dtmPath = ResourcePath::resolve("model/terrain/mars_jezero_alpha.bin");
+    EXPECT_TRUE(std::filesystem::exists(dtmPath));
+
+    std::ifstream file(dtmPath, std::ios::binary | std::ios::ate);
+    EXPECT_TRUE(file.is_open());
+    const std::streamsize size = file.tellg();
+    EXPECT_EQ(static_cast<size_t>(size), 1024 * 1024 * sizeof(float));
+
+    file.seekg(0, std::ios::beg);
+    std::vector<float> data(1024 * 1024);
+    file.read(reinterpret_cast<char*>(data.data()), size);
+
+    float minH = data[0];
+    float maxH = data[0];
+    for (float val : data) {
+        if (val < minH) minH = val;
+        if (val > maxH) maxH = val;
+    }
+
+    // Real Jezero Crater sector elevation range: ~42.4 meters of vertical relief [-21.43m, +20.97m]
+    EXPECT_NEAR(minH, -21.43f, 0.5f);
+    EXPECT_NEAR(maxH,  20.97f, 0.5f);
+    EXPECT_GT(maxH - minH, 40.0f);
+}
+
 } // namespace
 
 namespace torquelab {
@@ -2320,6 +2427,8 @@ int runAllValidationTests() {
         {"Unit 32: Terrain World Transform Stability & Physics Alignment (ARES Bug Fix)", unitTest32_TerrainWorldTransformStabilityAndPhysicsAlignment},
         {"Unit 33: Mars Rover Drivetrain, Low CoM & Planetary Suspension", unitTest33_MarsRoverDrivetrainAndSuspensionPhysics},
         {"Unit 34: Map Switching Lifecycle & Multi-Terrain Integrity", unitTest34_MapSwitchingLifecycleAndResourceIntegrity},
+        {"Unit 35: 6-Wheel Rocker-Bogie Kinematic Articulation & Differential Coupling", unitTest35_SixWheelRockerBogieKinematicsAndDifferentialCoupling},
+        {"Unit 36: Rover Physical Dimensions & NASA Jezero Crater DTM Scale Verification", unitTest36_RoverPhysicalScaleAndHiRISEDtmElevationScale},
         {"Test A: Static Equilibrium on Flat Ground", validationTestA_StaticEquilibrium},
         {"Test B: Acceleration & Longitudinal Load Transfer (Rear Squat)", validationTestB_AccelerationAndSquat},
         {"Test C: Service Braking, Front Dive & Progressive Deceleration", validationTestC_BrakingAndDive},

@@ -68,13 +68,18 @@ VehicleConfig createMarsRoverConfig() {
     cfg.frontWeightDistribution = 0.50; // Symmetrical weight balance
     cfg.inertiaTensor = Vec3{1600.0, 1800.0, 850.0};
 
-    // Stance geometry: wide 2.65m track width and 2.25m wheelbase
-    cfg.wheelbase = 2.25;
+    // Stance geometry & 6-Wheel Rocker-Bogie Mobility Architecture:
+    cfg.numWheels = 6;
+    cfg.isSixWheeled = true;
+    cfg.useRockerBogie = true;
+    cfg.wheelbase = 2.26;
     cfg.trackWidth = 2.65;
     cfg.frontTrackWidth = 2.65;
     cfg.rearTrackWidth = 2.65;
-    cfg.chassisHalfExtents = Vec3{1.30, 0.65, 1.45};
-    cfg.suspensionMountHeight = 0.25;
+    cfg.midWheelXOffset = 0.05;
+    cfg.midWheelZOffset = -0.055;
+    cfg.chassisHalfExtents = Vec3{1.15, 0.28, 1.35};
+    cfg.suspensionMountHeight = 0.18;
 
     // Rigid aluminium cleated wheels (52.5 cm diameter, non-pneumatic)
     cfg.wheelRadius = 0.2625;

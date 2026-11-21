@@ -285,9 +285,11 @@ void DebugOverlayGL::render(
         }
     }
 
+    const int nWheels = std::clamp(vehicle.config.numWheels, 4, 6);
+
     if (showWheelColliders) {
-        // Dedicated physical wheel collision cylinders (Cyan for Front, Amber for Rear)
-        for (int i = 0; i < 4; ++i) {
+        // Dedicated physical wheel collision cylinders (Cyan for Front, Amber for Rear/Mid)
+        for (int i = 0; i < nWheels; ++i) {
             const WheelState& w = snap.wheels[static_cast<size_t>(i)];
             const btCollisionObject* wheelObj = vehicle.getWheelCollisionObject(i);
             btTransform wt;
@@ -305,7 +307,7 @@ void DebugOverlayGL::render(
 
     // Wheel Axles & Steering Pivot Pins
     if (showWheelAxes) {
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < nWheels; ++i) {
             const WheelState& w = snap.wheels[static_cast<size_t>(i)];
             const Quat steerQ = quatFromAxisAngle(snap.upDirWorld, w.steeringAngle);
             const Vec3 axleDir = quatRotateVec3(steerQ, snap.lateralDirWorld);
@@ -325,7 +327,7 @@ void DebugOverlayGL::render(
 
     // Suspension Strut & Travel
     if (showSuspensionTravel) {
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < nWheels; ++i) {
             const WheelState& w = snap.wheels[static_cast<size_t>(i)];
             const Vec3 endPt = w.inContact ? w.contactPointWorld : w.wheelCenterWorld;
             const Color3 strutColor = w.isBottomedOut
@@ -338,7 +340,7 @@ void DebugOverlayGL::render(
     // Alignment & Fender Clearance Diagnostics (Draws clearance indicator from chassis outer edge to wheel)
     if (showAlignmentDiagnostics) {
         const double halfChassisWidth = vehicle.config.chassisHalfExtents.x;
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < nWheels; ++i) {
             const WheelState& w = snap.wheels[static_cast<size_t>(i)];
             const double sideSign = (i % 2 == 0) ? +1.0 : -1.0;
             const Vec3 bodyEdgeLocal{sideSign * halfChassisWidth, w.mountPointLocal.y, w.mountPointLocal.z};
@@ -365,7 +367,7 @@ void DebugOverlayGL::render(
 
     // 2. Per-Wheel Raycast Lines, Normal Load Arrows, Tire Force Arrows, and Friction Circles
     if (showContactForces) {
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < nWheels; ++i) {
             const WheelState& w = snap.wheels[static_cast<size_t>(i)];
             const Vec3 endPt = w.inContact ? w.contactPointWorld : w.wheelCenterWorld;
             addLine(w.mountPointWorld, endPt, Color3::fromHex(0xfef08a), lines);
@@ -433,7 +435,7 @@ void DebugOverlayGL::render(
 
     // 3. Deformed Pneumatic Tyre Profile & Multi-Point Contact Patch Samples
     if (showTireDeformation || showContactPatchSamples) {
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < nWheels; ++i) {
             const WheelState& w = snap.wheels[static_cast<size_t>(i)];
             const auto& tState = w.tireModel.getState();
             const Quat steerQ = quatFromAxisAngle(snap.upDirWorld, w.steeringAngle);
@@ -516,7 +518,7 @@ void DebugOverlayGL::render(
     markerMat.receiveShadows = false;
     markerMat.castShadows = false;
 
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < nWheels; ++i) {
         const WheelState& w = snap.wheels[static_cast<size_t>(i)];
         if (w.inContact && w.normalLoad > 10.0) {
             if (w.hasObstacleContact) {

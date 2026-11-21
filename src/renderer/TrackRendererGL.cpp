@@ -161,14 +161,7 @@ const MaterialProps& TrackRendererGL::getSurfaceMaterial(SurfaceType type) const
     return m_surfaceMaterials[0];
 }
 
-void TrackRendererGL::buildEnvironmentTerrain(Color3 groundColor) {
-    // Expansive horizon landscape terrain skirt (3600m x 3600m plane)
-    // Ensures the landscape extends seamlessly to the horizon in all directions,
-    // where atmospheric perspective naturally dissolves the ground into the planetary sky.
-    RenderableTrackItem terrainSkirt{};
-    terrainSkirt.mesh = Mesh::createPlaneXZ(3600.0f, 3600.0f);
-    terrainSkirt.modelMatrix = Mat4::fromTRS(Vec3{0.0, -0.05, 0.0}, quatIdentity());
-
+void TrackRendererGL::buildEnvironmentTerrain(Color3 groundColor, float innerCutoutHalfSize, float skirtElevation) {
     MaterialProps terrainMat{};
     terrainMat.baseColor = groundColor;
     terrainMat.uvScaleX = 240.0f;
@@ -177,9 +170,48 @@ void TrackRendererGL::buildEnvironmentTerrain(Color3 groundColor) {
     terrainMat.metalness = 0.02f;
     terrainMat.receiveShadows = false;
     terrainMat.castShadows = false;
-    terrainSkirt.material = terrainMat;
 
-    m_items.push_back(std::move(terrainSkirt));
+    if (innerCutoutHalfSize <= 0.0f) {
+        RenderableTrackItem terrainSkirt{};
+        terrainSkirt.mesh = Mesh::createPlaneXZ(3600.0f, 3600.0f);
+        terrainSkirt.modelMatrix = Mat4::fromTRS(Vec3{0.0, static_cast<double>(skirtElevation), 0.0}, quatIdentity());
+        terrainSkirt.material = terrainMat;
+        m_items.push_back(std::move(terrainSkirt));
+    } else {
+        // Build 4 perimeter collar quads surrounding the inner cutout area [-innerCutoutHalfSize, innerCutoutHalfSize]
+        // This completely prevents the flat skirt from cutting through high-relief DTM topography or covering valleys.
+        const float outerHalfSize = 1800.0f;
+        const float inHalf = innerCutoutHalfSize;
+        const float collarDepth = outerHalfSize - inHalf; // e.g. 1800 - 512 = 1288m
+
+        // North collar (+Z): spans full width, depth collarDepth
+        RenderableTrackItem northSkirt{};
+        northSkirt.mesh = Mesh::createPlaneXZ(outerHalfSize * 2.0f, collarDepth);
+        northSkirt.modelMatrix = Mat4::fromTRS(Vec3{0.0, static_cast<double>(skirtElevation), inHalf + collarDepth * 0.5f}, quatIdentity());
+        northSkirt.material = terrainMat;
+        m_items.push_back(std::move(northSkirt));
+
+        // South collar (-Z): spans full width, depth collarDepth
+        RenderableTrackItem southSkirt{};
+        southSkirt.mesh = Mesh::createPlaneXZ(outerHalfSize * 2.0f, collarDepth);
+        southSkirt.modelMatrix = Mat4::fromTRS(Vec3{0.0, static_cast<double>(skirtElevation), -(inHalf + collarDepth * 0.5f)}, quatIdentity());
+        southSkirt.material = terrainMat;
+        m_items.push_back(std::move(southSkirt));
+
+        // West collar (+X): spans between inner cutout Z range [-inHalf, inHalf]
+        RenderableTrackItem westSkirt{};
+        westSkirt.mesh = Mesh::createPlaneXZ(collarDepth, inHalf * 2.0f);
+        westSkirt.modelMatrix = Mat4::fromTRS(Vec3{inHalf + collarDepth * 0.5f, static_cast<double>(skirtElevation), 0.0}, quatIdentity());
+        westSkirt.material = terrainMat;
+        m_items.push_back(std::move(westSkirt));
+
+        // East collar (-X): spans between inner cutout Z range [-inHalf, inHalf]
+        RenderableTrackItem eastSkirt{};
+        eastSkirt.mesh = Mesh::createPlaneXZ(collarDepth, inHalf * 2.0f);
+        eastSkirt.modelMatrix = Mat4::fromTRS(Vec3{-(inHalf + collarDepth * 0.5f), static_cast<double>(skirtElevation), 0.0}, quatIdentity());
+        eastSkirt.material = terrainMat;
+        m_items.push_back(std::move(eastSkirt));
+    }
 }
 
 void TrackRendererGL::rebuildProvingGround(const std::vector<TrackBoxElement>& elements) {

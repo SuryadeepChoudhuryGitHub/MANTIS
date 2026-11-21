@@ -62,6 +62,11 @@ struct VehicleConfig {
     Vec3 inertiaTensor{2450.0, 2650.0, 680.0}; // Principal moments of inertia (kg*m^2): x=pitch, y=yaw, z=roll
 
     // --- Chassis & Wheel Geometry ---
+    int numWheels{4};                       // 4 for road/test cars, 6 for planetary rovers
+    bool isSixWheeled{false};               // True for 6-wheel rover mobility
+    bool useRockerBogie{false};             // True for passive 6-wheel rocker-bogie mechanism
+    double midWheelXOffset{0.0};            // Additional lateral track offset for middle wheels (m)
+    double midWheelZOffset{-0.055};         // Longitudinal offset for middle wheels (m)
     double wheelbase{2.70};                 // Distance between front and rear axles (m)
     double trackWidth{1.60};                // Lateral distance between left and right wheels (m)
     double frontTrackWidth{1.60};           // Front axle track width (m)
@@ -227,7 +232,7 @@ inline double getTirePressureKpa(const VehicleConfig& config, int wheelIndex) {
     return (config.rearTirePressureKpa > 10.0) ? config.rearTirePressureKpa : config.tireNominalPressureKpa;
 }
 
-/** Local mount positions */
+/** Local mount positions for standard 4-wheel vehicles */
 inline std::array<Vec3, 4> getWheelMountPositionsLocal(const VehicleConfig& config) {
     if (config.hasExplicitWheelMounts) {
         return config.explicitWheelMountsLocal;
@@ -244,12 +249,34 @@ inline std::array<Vec3, 4> getWheelMountPositionsLocal(const VehicleConfig& conf
     };
 }
 
+/** Local mount positions for 6-wheel rover mobility systems */
+inline std::array<Vec3, 6> getWheelMountPositionsLocal6(const VehicleConfig& config) {
+    const double halfTrackFront = (config.frontTrackWidth > 0.0 ? config.frontTrackWidth : config.trackWidth) * 0.5;
+    const double halfTrackRear  = (config.rearTrackWidth > 0.0  ? config.rearTrackWidth  : config.trackWidth) * 0.5;
+    const double halfWheelbase  = config.wheelbase * 0.5;
+    const double y = config.suspensionMountHeight;
+    const double midTrack = halfTrackFront + (config.midWheelXOffset != 0.0 ? config.midWheelXOffset : 0.122);
+    return {
+        Vec3{+halfTrackFront, y, +halfWheelbase},        // 0: FL
+        Vec3{-halfTrackFront, y, +halfWheelbase},        // 1: FR
+        Vec3{+halfTrackRear,  y, -halfWheelbase},        // 2: RL
+        Vec3{-halfTrackRear,  y, -halfWheelbase},        // 3: RR
+        Vec3{+midTrack,       y, config.midWheelZOffset}, // 4: ML
+        Vec3{-midTrack,       y, config.midWheelZOffset}  // 5: MR
+    };
+}
+
 inline Vec3 getCenterOfMassLocal(const VehicleConfig& config) {
     const double zOffset = (config.frontWeightDistribution - 0.5) * config.wheelbase;
     return Vec3{0.0, config.comHeightOffset, zOffset};
 }
 
 inline double computeEquilibriumChassisHeight(const VehicleConfig& config) {
+    if (config.useRockerBogie) {
+        // Authentic Mars rover ground clearance to chassis center:
+        // Wheel hub rests at wheelRadius; chassis sits 0.22m above hub
+        return config.wheelRadius + 0.22;
+    }
     const double totalStiffness = 2.0 * (config.frontSpringStiffness + config.rearSpringStiffness);
     const double avgCompression = (config.mass * GRAVITY) / totalStiffness;
     const double eqLength = clamp(

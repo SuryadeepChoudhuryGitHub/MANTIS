@@ -1,6 +1,10 @@
 #define CGLTF_IMPLEMENTATION
 #include "cgltf.h"
 
+#if defined(ARES_HAS_DRACO) && ARES_HAS_DRACO
+#include <draco/compression/decode.h>
+#endif
+
 #include "renderer/ModelLoaderGLB.h"
 #include "renderer/Texture2D.h"
 #include "renderer/VehicleAssetValidator.h"
@@ -421,84 +425,169 @@ bool ModelLoaderGLB::loadFromFile(
                 else if (attr.type == cgltf_attribute_type_tangent) tanAcc = attr.data;
             }
 
-            if (!posAcc) continue;
-
             Vec3 primMin{+1e9, +1e9, +1e9};
             Vec3 primMax{-1e9, -1e9, -1e9};
-
-            const size_t vertexCount = posAcc->count;
-            std::vector<VertexPNU> vertices(vertexCount);
-
-            for (size_t v = 0; v < vertexCount; ++v) {
-                float pos[3]{0, 0, 0};
-                cgltf_accessor_read_float(posAcc, v, pos, 3);
-                vertices[v].px = pos[0];
-                vertices[v].py = pos[1];
-                vertices[v].pz = pos[2];
-
-                if (normAcc) {
-                    float norm[3]{0, 1, 0};
-                    cgltf_accessor_read_float(normAcc, v, norm, 3);
-                    vertices[v].nx = norm[0];
-                    vertices[v].ny = norm[1];
-                    vertices[v].nz = norm[2];
-                } else {
-                    vertices[v].nx = 0.0f;
-                    vertices[v].ny = 1.0f;
-                    vertices[v].nz = 0.0f;
-                }
-
-                if (uvAcc) {
-                    float uv[2]{0, 0};
-                    cgltf_accessor_read_float(uvAcc, v, uv, 2);
-                    vertices[v].u = uv[0];
-                    vertices[v].v = uv[1];
-                } else {
-                    vertices[v].u = 0.0f;
-                    vertices[v].v = 0.0f;
-                }
-
-                if (tanAcc) {
-                    float tanVal[4]{1, 0, 0, 1};
-                    cgltf_accessor_read_float(tanAcc, v, tanVal, 4);
-                    vertices[v].tx = tanVal[0];
-                    vertices[v].ty = tanVal[1];
-                    vertices[v].tz = tanVal[2];
-                    vertices[v].tw = tanVal[3];
-                } else {
-                    vertices[v].tx = 1.0f;
-                    vertices[v].ty = 0.0f;
-                    vertices[v].tz = 0.0f;
-                    vertices[v].tw = 1.0f;
-                }
-
-                // Accumulate model AABB in model coordinate space
-                const Vec3 vWorld = mat4TransformPoint(localBind, Vec3{pos[0], pos[1], pos[2]});
-                primMin.x = std::min(primMin.x, vWorld.x);
-                primMin.y = std::min(primMin.y, vWorld.y);
-                primMin.z = std::min(primMin.z, vWorld.z);
-                primMax.x = std::max(primMax.x, vWorld.x);
-                primMax.y = std::max(primMax.y, vWorld.y);
-                primMax.z = std::max(primMax.z, vWorld.z);
-
-                outModel.aabbMin.x = std::min(outModel.aabbMin.x, vWorld.x);
-                outModel.aabbMin.y = std::min(outModel.aabbMin.y, vWorld.y);
-                outModel.aabbMin.z = std::min(outModel.aabbMin.z, vWorld.z);
-                outModel.aabbMax.x = std::max(outModel.aabbMax.x, vWorld.x);
-                outModel.aabbMax.y = std::max(outModel.aabbMax.y, vWorld.y);
-                outModel.aabbMax.z = std::max(outModel.aabbMax.z, vWorld.z);
-            }
-
+            std::vector<VertexPNU> vertices;
             std::vector<unsigned int> indices;
-            if (prim->indices) {
-                indices.resize(prim->indices->count);
-                for (size_t i = 0; i < prim->indices->count; ++i) {
-                    indices[i] = static_cast<unsigned int>(cgltf_accessor_read_index(prim->indices, i));
+
+#if defined(ARES_HAS_DRACO) && ARES_HAS_DRACO
+            if (prim->has_draco_mesh_compression) {
+                const cgltf_buffer_view* bv = prim->draco_mesh_compression.buffer_view;
+                if (bv) {
+                    const uint8_t* bufferData = cgltf_buffer_view_data(bv);
+                    const size_t bufferSize = bv->size;
+                    draco::DecoderBuffer decBuf;
+                    decBuf.Init(reinterpret_cast<const char*>(bufferData), bufferSize);
+                    draco::Decoder decoder;
+                    auto statusOrMesh = decoder.DecodeMeshFromBuffer(&decBuf);
+                    if (statusOrMesh.ok()) {
+                        auto dMesh = std::move(statusOrMesh).value();
+                        const size_t numPoints = dMesh->num_points();
+                        vertices.resize(numPoints);
+                        const draco::PointAttribute* dPos = dMesh->GetNamedAttribute(draco::GeometryAttribute::POSITION);
+                        const draco::PointAttribute* dNorm = dMesh->GetNamedAttribute(draco::GeometryAttribute::NORMAL);
+                        const draco::PointAttribute* dUv = dMesh->GetNamedAttribute(draco::GeometryAttribute::TEX_COORD);
+
+                        for (draco::PointIndex pt(0); pt < numPoints; ++pt) {
+                            float pos[3]{0, 0, 0};
+                            if (dPos) dPos->GetMappedValue(pt, pos);
+                            vertices[pt.value()].px = pos[0];
+                            vertices[pt.value()].py = pos[1];
+                            vertices[pt.value()].pz = pos[2];
+
+                            if (dNorm) {
+                                float norm[3]{0, 1, 0};
+                                dNorm->GetMappedValue(pt, norm);
+                                vertices[pt.value()].nx = norm[0];
+                                vertices[pt.value()].ny = norm[1];
+                                vertices[pt.value()].nz = norm[2];
+                            } else {
+                                vertices[pt.value()].nx = 0.0f;
+                                vertices[pt.value()].ny = 1.0f;
+                                vertices[pt.value()].nz = 0.0f;
+                            }
+
+                            if (dUv) {
+                                float uv[2]{0, 0};
+                                dUv->GetMappedValue(pt, uv);
+                                vertices[pt.value()].u = uv[0];
+                                vertices[pt.value()].v = uv[1];
+                            } else {
+                                vertices[pt.value()].u = 0.0f;
+                                vertices[pt.value()].v = 0.0f;
+                            }
+
+                            vertices[pt.value()].tx = 1.0f;
+                            vertices[pt.value()].ty = 0.0f;
+                            vertices[pt.value()].tz = 0.0f;
+                            vertices[pt.value()].tw = 1.0f;
+
+                            const Vec3 vWorld = mat4TransformPoint(localBind, Vec3{pos[0], pos[1], pos[2]});
+                            primMin.x = std::min(primMin.x, vWorld.x);
+                            primMin.y = std::min(primMin.y, vWorld.y);
+                            primMin.z = std::min(primMin.z, vWorld.z);
+                            primMax.x = std::max(primMax.x, vWorld.x);
+                            primMax.y = std::max(primMax.y, vWorld.y);
+                            primMax.z = std::max(primMax.z, vWorld.z);
+
+                            outModel.aabbMin.x = std::min(outModel.aabbMin.x, vWorld.x);
+                            outModel.aabbMin.y = std::min(outModel.aabbMin.y, vWorld.y);
+                            outModel.aabbMin.z = std::min(outModel.aabbMin.z, vWorld.z);
+                            outModel.aabbMax.x = std::max(outModel.aabbMax.x, vWorld.x);
+                            outModel.aabbMax.y = std::max(outModel.aabbMax.y, vWorld.y);
+                            outModel.aabbMax.z = std::max(outModel.aabbMax.z, vWorld.z);
+                        }
+
+                        const size_t numFaces = dMesh->num_faces();
+                        indices.resize(numFaces * 3);
+                        for (draco::FaceIndex f(0); f < numFaces; ++f) {
+                            const auto& face = dMesh->face(f);
+                            indices[f.value() * 3 + 0] = static_cast<unsigned int>(face[0].value());
+                            indices[f.value() * 3 + 1] = static_cast<unsigned int>(face[1].value());
+                            indices[f.value() * 3 + 2] = static_cast<unsigned int>(face[2].value());
+                        }
+                    }
                 }
-            } else {
-                indices.resize(vertexCount);
-                for (size_t i = 0; i < vertexCount; ++i) indices[i] = static_cast<unsigned int>(i);
+            } else
+#endif
+            {
+                if (!posAcc) continue;
+
+                const size_t vertexCount = posAcc->count;
+                vertices.resize(vertexCount);
+
+                for (size_t v = 0; v < vertexCount; ++v) {
+                    float pos[3]{0, 0, 0};
+                    cgltf_accessor_read_float(posAcc, v, pos, 3);
+                    vertices[v].px = pos[0];
+                    vertices[v].py = pos[1];
+                    vertices[v].pz = pos[2];
+
+                    if (normAcc) {
+                        float norm[3]{0, 1, 0};
+                        cgltf_accessor_read_float(normAcc, v, norm, 3);
+                        vertices[v].nx = norm[0];
+                        vertices[v].ny = norm[1];
+                        vertices[v].nz = norm[2];
+                    } else {
+                        vertices[v].nx = 0.0f;
+                        vertices[v].ny = 1.0f;
+                        vertices[v].nz = 0.0f;
+                    }
+
+                    if (uvAcc) {
+                        float uv[2]{0, 0};
+                        cgltf_accessor_read_float(uvAcc, v, uv, 2);
+                        vertices[v].u = uv[0];
+                        vertices[v].v = uv[1];
+                    } else {
+                        vertices[v].u = 0.0f;
+                        vertices[v].v = 0.0f;
+                    }
+
+                    if (tanAcc) {
+                        float tanVal[4]{1, 0, 0, 1};
+                        cgltf_accessor_read_float(tanAcc, v, tanVal, 4);
+                        vertices[v].tx = tanVal[0];
+                        vertices[v].ty = tanVal[1];
+                        vertices[v].tz = tanVal[2];
+                        vertices[v].tw = tanVal[3];
+                    } else {
+                        vertices[v].tx = 1.0f;
+                        vertices[v].ty = 0.0f;
+                        vertices[v].tz = 0.0f;
+                        vertices[v].tw = 1.0f;
+                    }
+
+                    // Accumulate model AABB in model coordinate space
+                    const Vec3 vWorld = mat4TransformPoint(localBind, Vec3{pos[0], pos[1], pos[2]});
+                    primMin.x = std::min(primMin.x, vWorld.x);
+                    primMin.y = std::min(primMin.y, vWorld.y);
+                    primMin.z = std::min(primMin.z, vWorld.z);
+                    primMax.x = std::max(primMax.x, vWorld.x);
+                    primMax.y = std::max(primMax.y, vWorld.y);
+                    primMax.z = std::max(primMax.z, vWorld.z);
+
+                    outModel.aabbMin.x = std::min(outModel.aabbMin.x, vWorld.x);
+                    outModel.aabbMin.y = std::min(outModel.aabbMin.y, vWorld.y);
+                    outModel.aabbMin.z = std::min(outModel.aabbMin.z, vWorld.z);
+                    outModel.aabbMax.x = std::max(outModel.aabbMax.x, vWorld.x);
+                    outModel.aabbMax.y = std::max(outModel.aabbMax.y, vWorld.y);
+                    outModel.aabbMax.z = std::max(outModel.aabbMax.z, vWorld.z);
+                }
+
+                if (prim->indices) {
+                    indices.resize(prim->indices->count);
+                    for (size_t i = 0; i < prim->indices->count; ++i) {
+                        indices[i] = static_cast<unsigned int>(cgltf_accessor_read_index(prim->indices, i));
+                    }
+                } else {
+                    indices.resize(vertexCount);
+                    for (size_t i = 0; i < vertexCount; ++i) indices[i] = static_cast<unsigned int>(i);
+                }
             }
+
+            if (vertices.empty() || indices.empty()) continue;
 
             // Inverted winding correction: if the transform mirrors space (det < 0), swap i1 and i2
             // so OpenGL backface culling does not cull exterior front faces
@@ -749,41 +838,69 @@ bool ModelLoaderGLB::loadFromFile(
             if (role == ModelPartRole::Ignore) continue;
 
             if (role == ModelPartRole::Wheel_All) {
-                // Partition triangles into 4 independent wheel assemblies:
-                // 0=FL (Z>=0, X>=0), 1=FR (Z>=0, X<0), 2=RL (Z<0, X>=0), 3=RR (Z<0, X<0)
-                std::array<std::vector<unsigned int>, 4> quadIndices;
+                // Check if vertices span 3 Z-bands (rover with front, mid, rear wheels)
+                // or 2 Z-bands (standard 4-wheel car)
                 const size_t numTris = indices.size() / 3;
+                bool isSixWheeled = false;
                 for (size_t t = 0; t < numTris; ++t) {
                     const unsigned int i0 = indices[t * 3 + 0];
                     const unsigned int i1 = indices[t * 3 + 1];
                     const unsigned int i2 = indices[t * 3 + 2];
-
                     const Vec3 p0 = mat4TransformPoint(localBind, Vec3{vertices[i0].px, vertices[i0].py, vertices[i0].pz});
                     const Vec3 p1 = mat4TransformPoint(localBind, Vec3{vertices[i1].px, vertices[i1].py, vertices[i1].pz});
                     const Vec3 p2 = mat4TransformPoint(localBind, Vec3{vertices[i2].px, vertices[i2].py, vertices[i2].pz});
-
                     const Vec3 c = vec3Scale(vec3Add(vec3Add(p0, p1), p2), 1.0 / 3.0);
-                    int qIdx = 0;
-                    if (c.z >= 0.0) {
-                        qIdx = (c.x >= 0.0) ? 0 : 1;
-                    } else {
-                        qIdx = (c.x >= 0.0) ? 2 : 3;
+                    if (std::abs(c.z) < 0.45 && std::abs(c.x) > 0.40) {
+                        isSixWheeled = true;
+                        break;
                     }
-                    quadIndices[static_cast<size_t>(qIdx)].push_back(i0);
-                    quadIndices[static_cast<size_t>(qIdx)].push_back(i1);
-                    quadIndices[static_cast<size_t>(qIdx)].push_back(i2);
                 }
 
-                static const ModelPartRole quadRoles[4] = {
+                const int nParts = isSixWheeled ? 6 : 4;
+                std::vector<std::vector<unsigned int>> partIndices(static_cast<size_t>(nParts));
+
+                for (size_t t = 0; t < numTris; ++t) {
+                    const unsigned int i0 = indices[t * 3 + 0];
+                    const unsigned int i1 = indices[t * 3 + 1];
+                    const unsigned int i2 = indices[t * 3 + 2];
+                    const Vec3 p0 = mat4TransformPoint(localBind, Vec3{vertices[i0].px, vertices[i0].py, vertices[i0].pz});
+                    const Vec3 p1 = mat4TransformPoint(localBind, Vec3{vertices[i1].px, vertices[i1].py, vertices[i1].pz});
+                    const Vec3 p2 = mat4TransformPoint(localBind, Vec3{vertices[i2].px, vertices[i2].py, vertices[i2].pz});
+                    const Vec3 c = vec3Scale(vec3Add(vec3Add(p0, p1), p2), 1.0 / 3.0);
+
+                    int pIdx = 0;
+                    if (isSixWheeled) {
+                        if (c.z > 0.45) {
+                            pIdx = (c.x >= 0.0) ? 0 : 1; // FL : FR
+                        } else if (c.z < -0.45) {
+                            pIdx = (c.x >= 0.0) ? 2 : 3; // RL : RR
+                        } else {
+                            pIdx = (c.x >= 0.0) ? 4 : 5; // ML : MR
+                        }
+                    } else {
+                        if (c.z >= 0.0) {
+                            pIdx = (c.x >= 0.0) ? 0 : 1; // FL : FR
+                        } else {
+                            pIdx = (c.x >= 0.0) ? 2 : 3; // RL : RR
+                        }
+                    }
+                    partIndices[static_cast<size_t>(pIdx)].push_back(i0);
+                    partIndices[static_cast<size_t>(pIdx)].push_back(i1);
+                    partIndices[static_cast<size_t>(pIdx)].push_back(i2);
+                }
+
+                static const ModelPartRole partRoles[6] = {
                     ModelPartRole::Wheel_FL,
                     ModelPartRole::Wheel_FR,
                     ModelPartRole::Wheel_RL,
-                    ModelPartRole::Wheel_RR
+                    ModelPartRole::Wheel_RR,
+                    ModelPartRole::Wheel_ML,
+                    ModelPartRole::Wheel_MR
                 };
-                static const char* quadSuffix[4] = {"_FL", "_FR", "_RL", "_RR"};
+                static const char* partSuffix[6] = {"_FL", "_FR", "_RL", "_RR", "_ML", "_MR"};
 
-                for (int q = 0; q < 4; ++q) {
-                    const auto& qIdxs = quadIndices[static_cast<size_t>(q)];
+                for (int q = 0; q < nParts; ++q) {
+                    const auto& qIdxs = partIndices[static_cast<size_t>(q)];
                     if (qIdxs.empty()) continue;
 
                     std::vector<VertexPNU> qVerts;
@@ -822,7 +939,7 @@ bool ModelLoaderGLB::loadFromFile(
                     qCpu.indices = qRemappedIndices;
 
                     LoadedModelPart qPart{};
-                    qPart.name = nodeName + quadSuffix[q];
+                    qPart.name = nodeName + partSuffix[q];
                     qPart.mesh = std::move(qMesh);
                     qPart.cpuGeometry = std::move(qCpu);
                     qPart.localBindMatrix = localBind;
@@ -830,7 +947,7 @@ bool ModelLoaderGLB::loadFromFile(
                     qPart.localRotation = quatIdentity();
                     qPart.localScale = Vec3{1.0, 1.0, 1.0};
                     qPart.material = matProps;
-                    qPart.role = quadRoles[q];
+                    qPart.role = partRoles[q];
                     qPart.isBrakeLight = isBrakeLight;
                     qPart.isReverseLight = isReverseLight;
                     qPart.isTransparent = isTransparent;
@@ -872,8 +989,8 @@ bool ModelLoaderGLB::loadFromFile(
     }
 
     // Compute wheel pivot centers per quadrant from assigned wheel parts and mesh geometry
-    std::array<Vec3, 4> wheelPosSums{Vec3{0,0,0}, Vec3{0,0,0}, Vec3{0,0,0}, Vec3{0,0,0}};
-    std::array<int, 4> wheelPartCounts{0, 0, 0, 0};
+    std::array<Vec3, 6> wheelPosSums{Vec3{0,0,0}, Vec3{0,0,0}, Vec3{0,0,0}, Vec3{0,0,0}, Vec3{0,0,0}, Vec3{0,0,0}};
+    std::array<int, 6> wheelPartCounts{0, 0, 0, 0, 0, 0};
 
     for (const auto& p : rawParts) {
         int wIdx = -1;
@@ -881,6 +998,8 @@ bool ModelLoaderGLB::loadFromFile(
         else if (p.role == ModelPartRole::Wheel_FR) wIdx = 1;
         else if (p.role == ModelPartRole::Wheel_RL) wIdx = 2;
         else if (p.role == ModelPartRole::Wheel_RR) wIdx = 3;
+        else if (p.role == ModelPartRole::Wheel_ML) wIdx = 4;
+        else if (p.role == ModelPartRole::Wheel_MR) wIdx = 5;
 
         if (wIdx >= 0) {
             wheelPosSums[static_cast<size_t>(wIdx)] = vec3Add(wheelPosSums[static_cast<size_t>(wIdx)], p.localPosition);
@@ -888,14 +1007,14 @@ bool ModelLoaderGLB::loadFromFile(
         }
     }
 
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 6; ++i) {
         if (wheelPartCounts[static_cast<size_t>(i)] > 0) {
             outModel.modelWheelCenters[static_cast<size_t>(i)] = vec3Scale(
                 wheelPosSums[static_cast<size_t>(i)],
                 1.0 / static_cast<double>(wheelPartCounts[static_cast<size_t>(i)])
             );
             outModel.wheelsIdentified[static_cast<size_t>(i)] = true;
-        } else {
+        } else if (i < 4) {
             outModel.diagnosticWarnings.push_back("Warning: Wheel quadrant " + std::to_string(i) + " was not identified.");
         }
     }
@@ -917,6 +1036,8 @@ bool ModelLoaderGLB::loadFromFile(
         else if (p.role == ModelPartRole::Wheel_FR) wIdx = 1;
         else if (p.role == ModelPartRole::Wheel_RL) wIdx = 2;
         else if (p.role == ModelPartRole::Wheel_RR) wIdx = 3;
+        else if (p.role == ModelPartRole::Wheel_ML) wIdx = 4;
+        else if (p.role == ModelPartRole::Wheel_MR) wIdx = 5;
 
         if (wIdx >= 0) {
             const Vec3& pivot = outModel.modelWheelCenters[static_cast<size_t>(wIdx)];

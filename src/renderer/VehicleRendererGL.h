@@ -167,21 +167,21 @@ private:
 
     // Dynamic world transforms updated each frame from interpolated physical state
     Mat4 m_chassisWorldMatrix;
-    std::array<Mat4, 4> m_wheelWorldMatrices;
-    std::array<Mat4, 4> m_knuckleWorldMatrices;
-    std::array<Mat4, 4> m_strutWorldMatrices;
-    std::array<WheelDeformState, 4> m_wheelDeformStates;
+    std::array<Mat4, 6> m_wheelWorldMatrices;
+    std::array<Mat4, 6> m_knuckleWorldMatrices;
+    std::array<Mat4, 6> m_strutWorldMatrices;
+    std::array<WheelDeformState, 6> m_wheelDeformStates;
 
     // Calculated transforms for imported model parts
     Mat4 m_importedChassisWorldMatrix;
-    std::array<std::vector<Mat4>, 4> m_importedWheelPartMatrices;
+    std::array<std::vector<Mat4>, 6> m_importedWheelPartMatrices;
 
     bool m_isBraking{false};
     bool m_isReverse{false};
     Vec3 m_vehiclePos{0.0, 0.0, 0.0};
     Quat m_vehicleRot{0.0, 0.0, 0.0, 1.0};
-    std::array<Vec3, 4> m_wheelCentersWorld{};
-    std::array<Vec3, 4> m_wheelMountsWorld{};
+    std::array<Vec3, 6> m_wheelCentersWorld{};
+    std::array<Vec3, 6> m_wheelMountsWorld{};
 
     // Visual debug line buffer
     struct DebugLineVertex {

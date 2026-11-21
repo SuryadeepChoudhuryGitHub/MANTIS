@@ -65,7 +65,7 @@ public:
     void clearTerrainChunks();
     void addTerrainChunk(TerrainChunk chunk);
     const std::vector<TerrainChunk>& getTerrainChunks() const { return m_chunks; }
-    void buildEnvironmentTerrain(Color3 groundColor = Color3::fromHex(0x22462b));
+    void buildEnvironmentTerrain(Color3 groundColor = Color3::fromHex(0x22462b), float innerCutoutHalfSize = 0.0f, float skirtElevation = -0.05f);
     void rebuildProvingGround(const std::vector<TrackBoxElement>& elements);
     const MaterialProps& getSurfaceMaterial(SurfaceType type) const;
 

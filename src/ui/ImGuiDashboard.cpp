@@ -573,15 +573,16 @@ void ImGuiDashboard::renderLeftPanels(
                 vehicle.setTirePunctured(0, flPunctured, 4500.0);
             }
             ImGui::SameLine();
+            const int numWheelsConfig = vehicle.config.numWheels >= 6 ? 6 : 4;
             if (ImGui::SmallButton("Inflate & Repair All")) {
-                for (int w = 0; w < 4; ++w) {
+                for (int w = 0; w < numWheelsConfig; ++w) {
                     vehicle.setTirePunctured(w, false);
                     vehicle.setTirePressureKpa(w, 220.0);
                 }
             }
 
             ImGui::Spacing();
-            ImGui::TextColored(hexToImVec4(0x4ade80), "4-WHEEL STRUCTURAL DEFORMATION:");
+            ImGui::TextColored(hexToImVec4(0x4ade80), "STRUCTURAL WHEEL/TYRE DEFORMATION:");
             if (ImGui::BeginTable("##TyreDeformTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
                 ImGui::TableSetupColumn("Wheel", ImGuiTableColumnFlags_WidthFixed, 42.0f);
                 ImGui::TableSetupColumn("Press.", ImGuiTableColumnFlags_WidthFixed, 55.0f);
@@ -590,8 +591,8 @@ void ImGuiDashboard::renderLeftPanels(
                 ImGui::TableSetupColumn("Patch (cm)", ImGuiTableColumnFlags_WidthStretch);
                 ImGui::TableHeadersRow();
 
-                static const char* const wNames[4] = {"FL", "FR", "RL", "RR"};
-                for (int w = 0; w < 4; ++w) {
+                static const char* const wNames[6] = {"FL", "FR", "RL", "RR", "ML", "MR"};
+                for (int w = 0; w < numWheelsConfig; ++w) {
                     const auto& tState = vehicle.wheels[static_cast<size_t>(w)].tireModel.getState();
                     ImGui::TableNextRow();
                     ImGui::TableSetColumnIndex(0);
@@ -616,11 +617,11 @@ void ImGuiDashboard::renderLeftPanels(
 
             ImGui::Spacing();
             ImGui::TextColored(hexToImVec4(0xfb923c), "THERMODYNAMICS & WEAR:");
-            for (int w = 0; w < 4; ++w) {
+            static const char* const wNamesDiag[6] = {"FL", "FR", "RL", "RR", "ML", "MR"};
+            for (int w = 0; w < numWheelsConfig; ++w) {
                 const auto& tState = vehicle.wheels[static_cast<size_t>(w)].tireModel.getState();
-                static const char* const wNames[4] = {"FL", "FR", "RL", "RR"};
                 ImGui::Text("%s: %.1f deg C | Wear: %.1f%% | %d/%d contacts",
-                    wNames[w],
+                    wNamesDiag[w],
                     tState.temperatureC,
                     tState.wearLevel * 100.0,
                     tState.activeContactSamples,

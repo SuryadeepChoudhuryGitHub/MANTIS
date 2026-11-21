@@ -138,6 +138,7 @@ add_library(TorqueLabPhysics STATIC
     src/vehicle/BrakeSystem.cpp
     src/vehicle/Aerodynamics.cpp
     src/vehicle/VehicleBody.cpp
+    src/vehicle/RockerBogieSuspension.cpp
     src/vehicle/VehicleDynamics.cpp
 )
 
@@ -157,6 +158,15 @@ target_link_libraries(TorqueLabPhysics PUBLIC
     glad
     OpenGL::GL
 )
+
+find_library(DRACO_LIB NAMES draco libdraco PATHS C:/msys64/ucrt64/lib /usr/lib /usr/local/lib)
+find_path(DRACO_INCLUDE_DIR NAMES draco/compression/decode.h PATHS C:/msys64/ucrt64/include /usr/include /usr/local/include)
+if(DRACO_LIB AND DRACO_INCLUDE_DIR)
+    message(STATUS "Found Draco library: ${DRACO_LIB}")
+    target_link_libraries(TorqueLabPhysics PUBLIC ${DRACO_LIB})
+    target_include_directories(TorqueLabPhysics PUBLIC ${DRACO_INCLUDE_DIR})
+    target_compile_definitions(TorqueLabPhysics PUBLIC ARES_HAS_DRACO=1)
+endif()
 
 # -----------------------------------------------------------------------------
 # 6. Native Desktop Application Target (ProjectARES)
@@ -226,16 +236,6 @@ add_custom_command(TARGET ProjectARES POST_BUILD
     COMMENT "Copying vehicle 3D models to output directory"
 )
 
-# Create compatibility binary so both ProjectARES.exe and TorqueLabNative.exe work
-add_custom_command(TARGET ProjectARES POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "$<TARGET_FILE:ProjectARES>"
-        "$<TARGET_FILE_DIR:ProjectARES>/TorqueLabNative$<TARGET_FILE_SUFFIX:ProjectARES>"
-    COMMENT "Creating TorqueLabNative compatibility binary"
-)
-
-add_custom_target(TorqueLabNative DEPENDS ProjectARES)
-
 # -----------------------------------------------------------------------------
 # 7. Automated Comparative Physics & Validation Test Runner (ProjectARESTests)
 # -----------------------------------------------------------------------------
@@ -253,14 +253,5 @@ target_include_directories(ProjectARESTests PRIVATE
 target_link_libraries(ProjectARESTests PRIVATE
     TorqueLabTestsLib
 )
-
-add_custom_command(TARGET ProjectARESTests POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "$<TARGET_FILE:ProjectARESTests>"
-        "$<TARGET_FILE_DIR:ProjectARESTests>/TorqueLabNativeTests$<TARGET_FILE_SUFFIX:ProjectARESTests>"
-    COMMENT "Creating TorqueLabNativeTests compatibility binary"
-)
-
-add_custom_target(TorqueLabNativeTests DEPENDS ProjectARESTests)
 
 add_test(NAME ProjectARESValidationSuite COMMAND ProjectARESTests)

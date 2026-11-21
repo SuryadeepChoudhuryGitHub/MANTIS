@@ -284,12 +284,13 @@ void VehicleRendererGL::syncWithVehicle(const VehicleDynamics& vehicle, double a
     );
 
     const float rotorRadius = m_wheelRadius * 0.50f;
+    const int numWheels = (vehicle.config.numWheels >= 6 || (m_activeModel && m_activeModel->wheelParts[4].size() > 0)) ? 6 : 4;
 
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < numWheels; ++i) {
         const Vec3& wPos = interp.wheelPositions[static_cast<size_t>(i)];
         const Quat& wRot = interp.wheelRotations[static_cast<size_t>(i)];
         const WheelState& ws = vehicle.wheels[static_cast<size_t>(i)];
-        const bool isLeft = (i == 0 || i == 2);
+        const bool isLeft = (i == 0 || i == 2 || i == 4);
 
         m_wheelCentersWorld[static_cast<size_t>(i)] = wPos;
         m_wheelMountsWorld[static_cast<size_t>(i)] = ws.mountPointWorld;
@@ -412,7 +413,8 @@ void VehicleRendererGL::renderShadowPass(Shader& depthShader) const {
             part.mesh.draw();
         }
 
-        for (int i = 0; i < 4; ++i) {
+        const int numWheels = (m_activeModel->wheelParts[4].size() > 0) ? 6 : 4;
+        for (int i = 0; i < numWheels; ++i) {
             const auto& parts = m_activeModel->wheelParts[static_cast<size_t>(i)];
             const auto& mats = m_importedWheelPartMatrices[static_cast<size_t>(i)];
             for (size_t k = 0; k < parts.size(); ++k) {
@@ -476,8 +478,10 @@ void VehicleRendererGL::renderMainPass(Shader& mainShader, const Vec3& cameraPos
             }
         }
 
-        // 2. Four Independent Wheels (Rims, Tires, Center Caps with realistic PBR materials)
-        for (int i = 0; i < 4; ++i) {
+        // 2. Wheels (Rims, Tires, Cleated Wheels with realistic PBR materials)
+        const int numWheels = (m_activeModel->wheelParts[4].size() > 0) ? 6 : 4;
+        const bool isRover = (numWheels == 6);
+        for (int i = 0; i < numWheels; ++i) {
             const auto& parts = m_activeModel->wheelParts[static_cast<size_t>(i)];
             const auto& mats = m_importedWheelPartMatrices[static_cast<size_t>(i)];
 
@@ -497,10 +501,12 @@ void VehicleRendererGL::renderMainPass(Shader& mainShader, const Vec3& cameraPos
 
             mainShader.setInt("uTireDeformEnabled", 0);
 
-            // Visible yellow coilover suspension struts connecting to chassis mounts
-            mainShader.applyMaterial(m_strutMat);
-            mainShader.setMat4("uModel", m_strutWorldMatrices[static_cast<size_t>(i)]);
-            m_strutMesh.draw();
+            // Visible yellow coilover suspension struts connecting to chassis mounts (cars only)
+            if (!isRover) {
+                mainShader.applyMaterial(m_strutMat);
+                mainShader.setMat4("uModel", m_strutWorldMatrices[static_cast<size_t>(i)]);
+                m_strutMesh.draw();
+            }
         }
 
         // 3. Transparent Cabin Glass & Light Lenses (Depth-sorted back-to-front + alpha blending)
@@ -637,7 +643,8 @@ void VehicleRendererGL::renderVisualDebug(Shader& lineShader, Shader& mainShader
     addDebugLine(m_vehiclePos, vec3Add(m_vehiclePos, vec3Scale(basis.left, 1.2)),    Color3{0.2f, 0.5f, 1.0f}); // Left (+X) Blue
 
     // 2. Wheel Mount to Wheel Center Strut Lines & Wheel Spin Axes
-    for (int i = 0; i < 4; ++i) {
+    const int numDebugWheels = (m_activeModel && m_activeModel->wheelParts[4].size() > 0) ? 6 : 4;
+    for (int i = 0; i < numDebugWheels; ++i) {
         const Vec3& center = m_wheelCentersWorld[static_cast<size_t>(i)];
         const Vec3& mount = m_wheelMountsWorld[static_cast<size_t>(i)];
         // Suspension strut travel line (Yellow)

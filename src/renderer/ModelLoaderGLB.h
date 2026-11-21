@@ -33,7 +33,9 @@ enum class ModelPartRole {
     Wheel_FR,        // Front-Right wheel assembly (rotates + steers)
     Wheel_RL,        // Rear-Left wheel assembly (rotates with drive torque)
     Wheel_RR,        // Rear-Right wheel assembly (rotates with drive torque)
-    Wheel_All,       // Merged wheel primitive containing all 4 wheels (auto-partitioned by quadrant)
+    Wheel_ML,        // Mid-Left wheel assembly (Mars 6-wheel rover)
+    Wheel_MR,        // Mid-Right wheel assembly (Mars 6-wheel rover)
+    Wheel_All,       // Merged wheel primitive containing all wheels (auto-partitioned)
     BrakeCaliper_FL, // Front-Left brake caliper (steers, does not rotate)
     BrakeCaliper_FR, // Front-Right brake caliper (steers, does not rotate)
     BrakeCaliper_RL, // Rear-Left brake caliper (non-steering, does not rotate)
@@ -71,19 +73,21 @@ struct LoadedVehicleModel {
 
     // Retained CPU Collision Geometry (Model Space)
     RawMeshGeometry chassisCollisionMesh; // Accumulated chassis body triangles in local model space
-    std::array<RawMeshGeometry, 4> wheelMeshes; // Wheels in quadrant 0=FL, 1=FR, 2=RL, 3=RR
-    std::array<RawMeshGeometry, 4> tireMeshes;  // Dedicated pure rubber tyre geometry in quadrant 0..3
+    std::array<RawMeshGeometry, 6> wheelMeshes; // Wheels 0=FL, 1=FR, 2=RL, 3=RR, 4=ML, 5=MR
+    std::array<RawMeshGeometry, 6> tireMeshes;  // Dedicated pure rubber tyre geometry
 
     // Identified wheel pivot centers in the model's coordinate frame
-    std::array<Vec3, 4> modelWheelCenters{
-        Vec3{ 0.77, 0.36,  1.53}, // FL
-        Vec3{-0.77, 0.36,  1.53}, // FR
-        Vec3{ 0.77, 0.36, -1.23}, // RL
-        Vec3{-0.77, 0.36, -1.23}  // RR
+    std::array<Vec3, 6> modelWheelCenters{
+        Vec3{ 1.144, 0.00,  1.130}, // FL
+        Vec3{-1.144, 0.00,  1.130}, // FR
+        Vec3{ 1.144, 0.00, -1.130}, // RL
+        Vec3{-1.144, 0.00, -1.130}, // RR
+        Vec3{ 1.266, 0.00, -0.055}, // ML
+        Vec3{-1.266, 0.00, -0.055}  // MR
     };
-    std::array<double, 4> modelWheelRadii{0.30, 0.30, 0.30, 0.30};
-    std::array<double, 4> modelWheelWidths{0.24, 0.24, 0.24, 0.24};
-    std::array<bool, 4> wheelsIdentified{false, false, false, false};
+    std::array<double, 6> modelWheelRadii{0.2625, 0.2625, 0.2625, 0.2625, 0.2625, 0.2625};
+    std::array<double, 6> modelWheelWidths{0.25, 0.25, 0.25, 0.25, 0.25, 0.25};
+    std::array<bool, 6> wheelsIdentified{false, false, false, false, false, false};
 
     // Model bounding box (overall and chassis only)
     Vec3 aabbMin{0.0, 0.0, 0.0};
@@ -92,8 +96,8 @@ struct LoadedVehicleModel {
 
     // Parts grouped by role for fast runtime rendering
     std::vector<LoadedModelPart> chassisParts;
-    std::array<std::vector<LoadedModelPart>, 4> wheelParts; // 0=FL, 1=FR, 2=RL, 3=RR
-    std::array<std::vector<LoadedModelPart>, 4> caliperParts;
+    std::array<std::vector<LoadedModelPart>, 6> wheelParts; // 0=FL, 1=FR, 2=RL, 3=RR, 4=ML, 5=MR
+    std::array<std::vector<LoadedModelPart>, 6> caliperParts;
     std::vector<LoadedModelPart> steeringWheelParts;
 
     size_t totalVertices{0};
