@@ -12,6 +12,10 @@
 #include <string>
 #include "physics/PhysicsWorld.h"
 #include "renderer/TrackRendererGL.h"
+#include "navigation/MinimapRenderer.h"
+#include "navigation/NavGrid.h"
+#include "navigation/AStarPlanner.h"
+#include "navigation/PathFollower.h"
 #include "vehicle/VehicleDynamics.h"
 
 namespace torquelab {
@@ -42,6 +46,13 @@ struct DashboardCallbacks {
     std::function<void(CollisionAlgorithmStrategy)> onRegenerateCollision;
     std::function<void(WheelCollisionFidelity)> onSelectCollisionFidelity;
     std::function<void(bool)> onToggleStationaryHold;
+    std::function<void(const Vec3&)> onSelectDestination;
+    std::function<void()> onStartNav;
+    std::function<void()> onPauseNav;
+    std::function<void()> onResumeNav;
+    std::function<void()> onStopNav;
+    std::function<void()> onClearDestination;
+    std::function<void(uint32_t)> onRegenerateProceduralTerrain;
 };
 
 class ImGuiDashboard {
@@ -73,7 +84,13 @@ public:
         float* iblIntensity = nullptr,
         int* diagnosticMode = nullptr,
         const GpuHardwareInfo* gpuInfo = nullptr,
-        const TerrainManager* terrainManager = nullptr
+        const TerrainManager* terrainManager = nullptr,
+        MinimapRenderer* minimapRenderer = nullptr,
+        PathFollower* pathFollower = nullptr,
+        const NavGrid* navGrid = nullptr,
+        AStarPlanner* planner = nullptr,
+        Vec3* selectedDestination = nullptr,
+        bool* hasDestination = nullptr
     );
 
     void showValidationReport(const std::string& message, bool isSuccess = true);
@@ -87,6 +104,8 @@ public:
     }
 
     bool telemetryEnabled{true};
+    bool minimapEnabled{true};
+    bool navigationPanelEnabled{true};
 
 private:
     std::vector<VehicleOption> m_availableVehicles;
@@ -127,6 +146,17 @@ private:
         int* diagnosticMode = nullptr,
         const GpuHardwareInfo* gpuInfo = nullptr,
         const TerrainManager* terrainManager = nullptr
+    );
+    void renderMinimapAndNavigationWindow(
+        VehicleDynamics& vehicle,
+        MinimapRenderer& minimap,
+        PathFollower& pathFollower,
+        const NavGrid& navGrid,
+        AStarPlanner& planner,
+        Vec3& selectedDestination,
+        bool& hasDestination,
+        int windowWidth,
+        int windowHeight
     );
     void renderControllerSettings(InputControllerGLFW* inputController);
     void renderRightTelemetryPanel(

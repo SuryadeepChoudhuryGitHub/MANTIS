@@ -12,6 +12,10 @@
 #include "input/InputControllerGLFW.h"
 #include "physics/CollisionMeshGeometry.h"
 #include "physics/PhysicsWorld.h"
+#include "navigation/MinimapRenderer.h"
+#include "navigation/NavGrid.h"
+#include "navigation/AStarPlanner.h"
+#include "navigation/PathFollower.h"
 #include "renderer/CameraControllerGL.h"
 #include "renderer/DebugOverlayGL.h"
 #include "renderer/EnvironmentMapGL.h"
@@ -77,6 +81,13 @@ private:
     std::unique_ptr<ImGuiDashboard> m_dashboard;
     std::unordered_map<std::string, GeneratedVehicleCollision> m_vehicleCollisions;
     TerrainManager m_terrainManager;
+
+    MinimapRenderer m_minimapRenderer;
+    NavGrid m_navGrid;
+    AStarPlanner m_planner;
+    PathFollower m_pathFollower;
+    Vec3 m_selectedDestination{0.0, 0.0, 0.0};
+    bool m_hasDestination{false};
 
     EnvironmentMapGL m_environmentMap;
     float m_exposure{1.0f};

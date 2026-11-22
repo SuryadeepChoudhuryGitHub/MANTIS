@@ -135,6 +135,12 @@ add_library(TorqueLabPhysics STATIC
     src/renderer/ShadowMapFBO.cpp
     src/renderer/TrackRendererGL.cpp
     src/terrain/TerrainManager.cpp
+    src/terrain/ProceduralTerrainGenerator.cpp
+    src/terrain/ProceduralPlanetMap.cpp
+    src/navigation/NavGrid.cpp
+    src/navigation/AStarPlanner.cpp
+    src/navigation/PathFollower.cpp
+    src/navigation/MinimapRenderer.cpp
     src/vehicle/VehicleConfig.cpp
     src/vehicle/SuspensionSystem.cpp
     src/vehicle/TireModel.cpp

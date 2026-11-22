@@ -125,6 +125,10 @@ bool Application::init(int width, int height, bool visible) {
 
     // Initialize with primary Mars Jezero Crater exploration site
     m_terrainManager.switchMap("mars_jezero_alpha", *m_physicsWorld, &m_trackRenderer, &m_skyRenderer);
+    if (auto activeMap = m_terrainManager.getActiveMap()) {
+        m_navGrid.buildFromTerrain(*activeMap);
+        m_minimapRenderer.updateTerrain(*activeMap);
+    }
 
     const float aspect = static_cast<float>(m_fbWidth) / static_cast<float>(std::max(1, m_fbHeight));
     m_cameraController = std::make_unique<CameraControllerGL>(aspect);
@@ -386,6 +390,12 @@ void Application::switchActiveVehicle(const std::string& vehicleId) {
 
 void Application::switchActiveMap(const std::string& mapId) {
     if (m_terrainManager.switchMap(mapId, *m_physicsWorld, &m_trackRenderer, &m_skyRenderer)) {
+        if (auto activeMap = m_terrainManager.getActiveMap()) {
+            m_navGrid.buildFromTerrain(*activeMap);
+            m_minimapRenderer.updateTerrain(*activeMap);
+            m_pathFollower.clearPath();
+            m_hasDestination = false;
+        }
         m_cameraController->snapToVehicle(*m_physicsWorld->vehicle);
         m_vehicleRenderer.syncWithVehicle(*m_physicsWorld->vehicle, 1.0);
         if (m_dashboard) {
@@ -454,7 +464,21 @@ int Application::run(int maxFrames) {
 
         const VehicleControlInputs inputs = m_inputController->sampleInputs(m_window, frameDt);
         const double t2 = glfwGetTime();
-        m_physicsWorld->vehicle->currentInputs = inputs;
+
+        const bool humanInterfered = (std::abs(inputs.steering) > 0.1 || inputs.throttle > 0.05 || inputs.brake > 0.05);
+        if (m_pathFollower.isNavigating()) {
+            m_pathFollower.update(frameDt, *m_physicsWorld->vehicle, humanInterfered);
+            if (m_pathFollower.isReplanRequested() && m_hasDestination) {
+                m_pathFollower.clearReplanRequest();
+                const Vec3 roverPos = m_physicsWorld->vehicle->body.getPosition();
+                PlanResult repRes = m_planner.plan(m_navGrid, roverPos, m_selectedDestination);
+                if (repRes.success) {
+                    m_pathFollower.setPath(repRes.waypoints);
+                }
+            }
+        } else {
+            m_physicsWorld->vehicle->currentInputs = inputs;
+        }
         if (maxFrames == 600) {
             m_physicsWorld->vehicle->currentInputs.throttle = 1.0;
         }
@@ -562,7 +586,13 @@ int Application::run(int maxFrames) {
             &m_iblIntensity,
             &m_diagnosticMode,
             &m_gpuInfo,
-            &m_terrainManager
+            &m_terrainManager,
+            &m_minimapRenderer,
+            &m_pathFollower,
+            &m_navGrid,
+            &m_planner,
+            &m_selectedDestination,
+            &m_hasDestination
         );
 
         ImGui::Render();

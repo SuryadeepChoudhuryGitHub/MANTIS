@@ -12,6 +12,7 @@
 #include "renderer/ModelLoaderGLB.h"
 #include "renderer/SkyRendererGL.h"
 #include "renderer/TrackRendererGL.h"
+#include "terrain/ProceduralPlanetMap.h"
 
 namespace torquelab {
 
@@ -775,6 +776,18 @@ void TerrainManager::init() {
     m_maps.push_back(std::make_shared<MarsSiteAlphaMap>());
     m_maps.push_back(std::make_shared<MarsSiteBetaMap>());
     m_maps.push_back(std::make_shared<MarsRegionalDTMMap>());
+    m_maps.push_back(std::make_shared<ProceduralPlanetMap>(
+        "procedural_mars",
+        "Mars Procedural (fBm / Craters)",
+        "Multi-scale procedural Martian terrain with impact craters, basalt boulders and regolith plains",
+        ProceduralTerrainConfig::createMarsPreset(19760720)
+    ));
+    m_maps.push_back(std::make_shared<ProceduralPlanetMap>(
+        "procedural_moon",
+        "Moon Procedural (Lunar Highlands)",
+        "Multi-scale procedural Lunar highlands with impact basins, anorthosite rocks and craters",
+        ProceduralTerrainConfig::createMoonPreset(19690720)
+    ));
     m_activeMapIndex = 0;
 }
 

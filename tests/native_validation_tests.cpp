@@ -32,6 +32,12 @@
 #include "renderer/SkyRendererGL.h"
 #include "terrain/TerrainChunk.h"
 #include "terrain/TerrainManager.h"
+#include "terrain/ProceduralTerrainGenerator.h"
+#include "terrain/ProceduralPlanetMap.h"
+#include "navigation/NavGrid.h"
+#include "navigation/AStarPlanner.h"
+#include "navigation/PathFollower.h"
+#include "navigation/MinimapRenderer.h"
 #include "vehicle/Aerodynamics.h"
 #include "vehicle/BrakeSystem.h"
 #include "vehicle/Drivetrain.h"
@@ -2574,6 +2580,340 @@ void unitTest38_WheelCollisionTerrainElevationMappingAndAntiSinkage() {
     EXPECT_GE(rbMoving.wheelsInContactCount, 3);
 }
 
+void unitTest39_ProceduralTerrainGenerationAndSeedDeterminism() {
+    // 1. Seed Determinism Test: identical seed must yield bit-for-bit identical terrain
+    ProceduralTerrainConfig marsCfg1 = ProceduralTerrainConfig::createMarsPreset(424242u);
+    marsCfg1.worldSize = 256.0;
+    marsCfg1.gridResolution = 256;
+
+    ProceduralTerrainConfig marsCfg2 = marsCfg1;
+
+    std::shared_ptr<ProceduralTerrainData> data1 = ProceduralTerrainGenerator::generate(marsCfg1);
+    std::shared_ptr<ProceduralTerrainData> data2 = ProceduralTerrainGenerator::generate(marsCfg2);
+
+    EXPECT_TRUE(data1 != nullptr && data1->isValid());
+    EXPECT_TRUE(data2 != nullptr && data2->isValid());
+    EXPECT_GT(data1->getHeightfield().size(), 0);
+    EXPECT_EQ(data1->getHeightfield().size(), data2->getHeightfield().size());
+    EXPECT_EQ(data1->getResolution(), data2->getResolution());
+
+    // Verify elevations match across multiple test coordinates
+    for (double testX = -100.0; testX <= 100.0; testX += 25.0) {
+        for (double testZ = -100.0; testZ <= 100.0; testZ += 25.0) {
+            const double e1 = data1->sampleHeight(testX, testZ);
+            const double e2 = data2->sampleHeight(testX, testZ);
+            EXPECT_NEAR(e1, e2, 1e-9);
+            EXPECT_TRUE(std::isfinite(e1));
+        }
+    }
+
+    // 2. Seed Variation Test: different seeds must produce different elevation profiles
+    ProceduralTerrainConfig marsCfg3 = marsCfg1;
+    marsCfg3.seed = 987654u;
+    std::shared_ptr<ProceduralTerrainData> data3 = ProceduralTerrainGenerator::generate(marsCfg3);
+
+    double totalElevationDiff = 0.0;
+    for (double testX = -80.0; testX <= 80.0; testX += 40.0) {
+        for (double testZ = -80.0; testZ <= 80.0; testZ += 40.0) {
+            const double e1 = data1->sampleHeight(testX, testZ);
+            const double e3 = data3->sampleHeight(testX, testZ);
+            totalElevationDiff += std::abs(e1 - e3);
+        }
+    }
+    EXPECT_GT(totalElevationDiff, 5.0);
+
+    // 3. Preset Differences: Moon terrain must exhibit craters and distinctive roughness
+    ProceduralTerrainConfig moonCfg = ProceduralTerrainConfig::createMoonPreset(424242u);
+    moonCfg.worldSize = 256.0;
+    moonCfg.gridResolution = 256;
+    std::shared_ptr<ProceduralTerrainData> moonData = ProceduralTerrainGenerator::generate(moonCfg);
+
+    EXPECT_GT(moonData->getCraters().size(), 0);
+    EXPECT_GT(data1->getCraters().size(), 0);
+    EXPECT_LT(moonData->getMinHeight(), moonData->getMaxHeight());
+}
+
+void unitTest40_MathematicalCraterProfilesAndGeologicalElevationMechanics() {
+    GeologicalCrater crater{};
+    crater.center = Vec2{0.0, 0.0};
+    crater.radius = 50.0;
+    crater.depth = 15.0;
+    crater.rimHeight = 4.0;
+    crater.rimWidth = 12.0;
+    crater.irregularity = 0.05;
+
+    // 1. Crater Center: Maximum depth depression
+    double elevCenter = 0.0, factorCenter = 0.0;
+    EXPECT_TRUE(crater.evaluate(0.0, 0.0, elevCenter, factorCenter));
+    EXPECT_LT(elevCenter, -10.0);
+
+    // 2. Crater Rim: Raised rim height
+    double elevRim = 0.0, factorRim = 0.0;
+    EXPECT_TRUE(crater.evaluate(50.0, 0.0, elevRim, factorRim));
+    EXPECT_GT(elevRim, 2.0);
+
+    // 3. Ejecta Blanket (outside rim, e.g. at 1.4 * radius = 70m)
+    double elevEjecta = 0.0, factorEjecta = 0.0;
+    crater.evaluate(70.0, 0.0, elevEjecta, factorEjecta);
+    EXPECT_GT(elevEjecta, 0.0);
+    EXPECT_LT(elevEjecta, elevRim);
+
+    // 4. Far Outside: Decay to zero
+    double elevFar = 0.0, factorFar = 0.0;
+    bool inside = crater.evaluate(250.0, 0.0, elevFar, factorFar);
+    EXPECT_FALSE(inside);
+    EXPECT_NEAR(elevFar, 0.0, 0.05);
+
+    // 5. Angular Harmonic Irregularity
+    crater.irregularity = 0.15;
+    double elevAngle0 = 0.0, f0 = 0.0;
+    double elevAngle90 = 0.0, f90 = 0.0;
+    crater.evaluate(50.0, 0.0, elevAngle0, f0);
+    crater.evaluate(0.0, 50.0, elevAngle90, f90);
+    EXPECT_TRUE(std::isfinite(elevAngle0));
+    EXPECT_TRUE(std::isfinite(elevAngle90));
+}
+
+void unitTest41_ProceduralRockObstaclePlacementAndBulletRigidBodyCollision() {
+    ProceduralTerrainConfig cfg = ProceduralTerrainConfig::createMarsPreset(55555u);
+    cfg.worldSize = 256.0;
+    cfg.gridResolution = 256;
+    cfg.numRocks = 25;
+
+    ProceduralPlanetMap map("procedural_mars_test", "Mars Procedural Test", "Test description", cfg);
+
+    const VehicleConfig rover = createMarsRoverConfig();
+    PhysicsWorld world(rover, false, nullptr);
+
+    EXPECT_TRUE(map.buildPhysics(world));
+    EXPECT_GT(map.getData()->getRocks().size(), 0);
+
+    // Query rock position: elevation at rock center must be valid and finite
+    const auto& rocks = map.getData()->getRocks();
+    EXPECT_FALSE(rocks.empty());
+    const auto& firstRock = rocks.front();
+    double elev = 0.0;
+    Vec3 norm{0.0, 1.0, 0.0};
+    EXPECT_TRUE(map.getElevationAt(firstRock.position.x, firstRock.position.z, elev, norm));
+    EXPECT_TRUE(std::isfinite(elev));
+}
+
+void unitTest42_NavGridTraversabilityAndSlopeRolloverRejection() {
+    ProceduralTerrainConfig cfg = ProceduralTerrainConfig::createMarsPreset(77777u);
+    cfg.worldSize = 128.0;
+    cfg.gridResolution = 128;
+
+    ProceduralPlanetMap map("nav_test_map", "Nav Test Map", "Test description", cfg);
+
+    NavGridConfig navCfg{};
+    navCfg.worldSizeM = 128.0;
+    navCfg.cellSizeM = 1.0;
+    navCfg.maxTraversableSlopeRad = 0.4363; // 25 degrees rollover limit
+    navCfg.roverFootprintRadiusM = 1.65;
+
+    NavGrid grid(navCfg);
+    EXPECT_TRUE(grid.buildFromTerrain(map));
+
+    EXPECT_EQ(grid.getWidth(), 128);
+    EXPECT_EQ(grid.getHeight(), 128);
+
+    int safeCount = 0;
+    int blockedCount = 0;
+    for (int gz = 0; gz < grid.getHeight(); ++gz) {
+        for (int gx = 0; gx < grid.getWidth(); ++gx) {
+            const NavNode* node = grid.getNode(gx, gz);
+            EXPECT_TRUE(node != nullptr);
+            if (node->traversability == CellTraversability::Traversable) {
+                ++safeCount;
+                EXPECT_LE(node->slopeAngleRad, navCfg.maxTraversableSlopeRad + 0.01);
+            } else {
+                ++blockedCount;
+            }
+        }
+    }
+    EXPECT_GT(safeCount, 100);
+
+    // Footprint check on center
+    EXPECT_TRUE(grid.isFootprintSafe(0.0, 0.0, 0.0) || !grid.isTraversable(0.0, 0.0));
+}
+
+void unitTest43_AStarPathfindingAdmissibilityAndDijkstraComparison() {
+    ProceduralTerrainConfig cfg = ProceduralTerrainConfig::createScenarioA_FlatPlain(101u);
+    cfg.worldSize = 128.0;
+    cfg.gridResolution = 128;
+
+    ProceduralPlanetMap map("nav_test_astar", "Nav Test AStar", "Test description", cfg);
+
+    NavGridConfig navCfg{};
+    navCfg.worldSizeM = 128.0;
+    navCfg.cellSizeM = 1.0;
+
+    NavGrid grid(navCfg);
+    EXPECT_TRUE(grid.buildFromTerrain(map));
+
+    const NavNode* startNode = nullptr;
+    const NavNode* goalNode = nullptr;
+    for (int gz = 20; gz < 50; ++gz) {
+        for (int gx = 20; gx < 50; ++gx) {
+            auto n = grid.getNode(gx, gz);
+            if (n && n->traversability == CellTraversability::Traversable) {
+                startNode = n;
+                break;
+            }
+        }
+        if (startNode) break;
+    }
+    for (int gz = 80; gz < 110; ++gz) {
+        for (int gx = 80; gx < 110; ++gx) {
+            auto n = grid.getNode(gx, gz);
+            if (n && n->traversability == CellTraversability::Traversable) {
+                goalNode = n;
+                break;
+            }
+        }
+        if (goalNode) break;
+    }
+    EXPECT_TRUE(startNode != nullptr);
+    EXPECT_TRUE(goalNode != nullptr);
+    const Vec3 start = startNode->worldPosition;
+    const Vec3 goal = goalNode->worldPosition;
+
+    PlannerConfig astarCfg{};
+    astarCfg.useDijkstra = false;
+    astarCfg.heuristicWeight = 1.0;
+    astarCfg.enableSmoothing = false;
+    AStarPlanner astar(astarCfg);
+    PlanResult resAStar = astar.plan(grid, start, goal);
+    EXPECT_TRUE(resAStar.success);
+    EXPECT_GT(resAStar.waypoints.size(), 2);
+    EXPECT_GT(resAStar.totalDistanceM, 40.0);
+
+    PlannerConfig dijkstraCfg = astarCfg;
+    dijkstraCfg.useDijkstra = true;
+    AStarPlanner dijkstra(dijkstraCfg);
+    PlanResult resDijkstra = dijkstra.plan(grid, start, goal);
+
+    EXPECT_TRUE(resDijkstra.success);
+    EXPECT_NEAR(resAStar.totalPathCost, resDijkstra.totalPathCost, 0.05);
+    EXPECT_LE(resAStar.nodesExpanded, resDijkstra.nodesExpanded);
+
+    PlannerConfig smoothCfg = astarCfg;
+    smoothCfg.enableSmoothing = true;
+    AStarPlanner smoothPlanner(smoothCfg);
+    PlanResult resSmooth = smoothPlanner.plan(grid, start, goal);
+
+    EXPECT_TRUE(resSmooth.success);
+    EXPECT_LE(resSmooth.waypoints.size(), resAStar.waypoints.size());
+    EXPECT_LE(resSmooth.totalDistanceM, resAStar.totalDistanceM + 0.01);
+}
+
+void unitTest44_AutonomousPathFollowerWaypointAdvancementAndSpeedAdaptation() {
+    PathFollowerConfig cfg{};
+    cfg.lookaheadDistanceM = 2.0;
+    cfg.arrivalThresholdM = 0.85;
+    cfg.waypointAdvanceRadiusM = 1.5;
+    cfg.cruiseSpeedMPerSec = 1.0;
+
+    PathFollower follower(cfg);
+    EXPECT_EQ(follower.getState(), NavState::Idle);
+
+    std::vector<PathWaypoint> path;
+    for (double z = 0.0; z <= 12.0; z += 2.0) {
+        PathWaypoint wp{};
+        wp.positionWorld = Vec3{0.0, 0.0, z};
+        wp.targetSpeedMPerSec = 1.0;
+        path.push_back(wp);
+    }
+    follower.setPath(path);
+
+    EXPECT_EQ(follower.getState(), NavState::Idle);
+    follower.startNavigation();
+    EXPECT_EQ(follower.getState(), NavState::Navigating);
+
+    const VehicleConfig rover = createMarsRoverConfig();
+    PhysicsWorld world(rover, false, nullptr);
+
+    world.vehicle->body.setLinearVelocity(Vec3{0, 0, 0});
+    bool active = follower.update(0.016, *world.vehicle, false);
+    EXPECT_TRUE(active);
+    EXPECT_GT(world.vehicle->currentInputs.throttle, 0.0);
+    EXPECT_NEAR(world.vehicle->currentInputs.steering, 0.0, 0.2);
+
+    const Vec3 pMid{0.0, 0.5, 7.0};
+    const Quat qIdent = quatIdentity();
+    world.vehicle->resetVehicle(&pMid, &qIdent);
+    world.stepFixed();
+
+    follower.update(0.016, *world.vehicle, false);
+    const auto& telem = follower.getTelemetry();
+    EXPECT_GE(telem.currentWaypointIndex, 2);
+
+    const Vec3 pEnd{0.0, 0.5, 12.0};
+    world.vehicle->resetVehicle(&pEnd, &qIdent);
+    world.stepFixed();
+
+    follower.update(0.016, *world.vehicle, false);
+    EXPECT_EQ(follower.getState(), NavState::Arrived);
+    EXPECT_NEAR(world.vehicle->currentInputs.throttle, 0.0, 1e-4);
+    EXPECT_GT(world.vehicle->currentInputs.brake, 0.5);
+
+    follower.setPath(path);
+    follower.startNavigation();
+    EXPECT_EQ(follower.getState(), NavState::Navigating);
+
+    world.vehicle->currentInputs.steering = 0.8;
+    follower.update(0.016, *world.vehicle, /*humanInterfered=*/true);
+    EXPECT_NEAR(world.vehicle->currentInputs.steering, 0.8, 1e-4);
+}
+
+void unitTest45_InteractiveMinimapCoordinateTransformations() {
+    MinimapRenderer minimap;
+    minimap.setZoom(1.5);
+    minimap.getViewport().panOffsetX = 10.0;
+    minimap.getViewport().panOffsetZ = -20.0;
+    minimap.getViewport().followRover = false;
+
+    const Vec3 roverPos{5.0, 0.0, -10.0};
+    const float winX = 100.0f;
+    const float winY = 50.0f;
+    const float winDim = 400.0f;
+
+    const std::vector<std::pair<float, float>> testScreenPixels{
+        {150.0f, 100.0f},
+        {300.0f, 250.0f},
+        {450.0f, 400.0f},
+        {200.0f, 350.0f}
+    };
+
+    for (const auto& sp : testScreenPixels) {
+        Vec3 worldPos;
+        EXPECT_TRUE(minimap.screenToWorld(sp.first, sp.second, winX, winY, winDim, winDim, roverPos, worldPos));
+
+        float outScreenX = 0.0f;
+        float outScreenY = 0.0f;
+        EXPECT_TRUE(minimap.worldToScreen(worldPos, winX, winY, winDim, winDim, roverPos, outScreenX, outScreenY));
+
+        EXPECT_NEAR(outScreenX, sp.first, 0.15f);
+        EXPECT_NEAR(outScreenY, sp.second, 0.15f);
+    }
+
+    Vec3 northWorld, southWorld;
+    minimap.screenToWorld(300.0f, 100.0f, winX, winY, winDim, winDim, roverPos, northWorld);
+    minimap.screenToWorld(300.0f, 400.0f, winX, winY, winDim, winDim, roverPos, southWorld);
+
+    EXPECT_GT(northWorld.z, southWorld.z);
+
+    const Color3 cLow = MinimapRenderer::sampleElevationHeatmapColor(0.0);
+    const Color3 cMid = MinimapRenderer::sampleElevationHeatmapColor(0.5);
+    const Color3 cHigh = MinimapRenderer::sampleElevationHeatmapColor(1.0);
+
+    EXPECT_GT(cLow.b, 0.5f);
+    EXPECT_LT(cLow.r, 0.2f);
+    EXPECT_GT(cMid.g, 0.6f);
+    EXPECT_GT(cHigh.r, 0.7f);
+    EXPECT_LT(cHigh.b, 0.2f);
+}
+
 } // namespace
 
 namespace torquelab {
@@ -2628,6 +2968,13 @@ int runAllValidationTests() {
         {"Unit 36: Rover Physical Dimensions & NASA Jezero Crater DTM Scale Verification", unitTest36_RoverPhysicalScaleAndHiRISEDtmElevationScale},
         {"Unit 37: Perseverance Rover Mechanical Articulation, 6-Wheel Rotation & Kinematic Joint Closure", unitTest37_PerseveranceMobilityArticulationAndKinematicJointClosure},
         {"Unit 38: Wheel Collision Geometry, Terrain Elevation Mapping & Anti-Sinkage Verification", unitTest38_WheelCollisionTerrainElevationMappingAndAntiSinkage},
+        {"Unit 39: Procedural Planetary Terrain Generation, Multi-Octave fBm & Seed Determinism", unitTest39_ProceduralTerrainGenerationAndSeedDeterminism},
+        {"Unit 40: Mathematical Crater Profiles & Geological Elevation Mechanics", unitTest40_MathematicalCraterProfilesAndGeologicalElevationMechanics},
+        {"Unit 41: Procedural Rock Obstacle Placement & Bullet Rigid Body Collision", unitTest41_ProceduralRockObstaclePlacementAndBulletRigidBodyCollision},
+        {"Unit 42: Navigation Grid, Footprint Traversability & Slope Rollover Rejection", unitTest42_NavGridTraversabilityAndSlopeRolloverRejection},
+        {"Unit 43: A* Pathfinding Admissibility, Heuristic Optimality & Dijkstra Comparison", unitTest43_AStarPathfindingAdmissibilityAndDijkstraComparison},
+        {"Unit 44: Autonomous Path-Following Controller, Waypoint Advancement & Speed Adaptation", unitTest44_AutonomousPathFollowerWaypointAdvancementAndSpeedAdaptation},
+        {"Unit 45: Interactive Topographical Minimap Coordinate Transformations", unitTest45_InteractiveMinimapCoordinateTransformations},
         {"Test A: Static Equilibrium on Flat Ground", validationTestA_StaticEquilibrium},
         {"Test B: Acceleration & Longitudinal Load Transfer (Rear Squat)", validationTestB_AccelerationAndSquat},
         {"Test C: Service Braking, Front Dive & Progressive Deceleration", validationTestC_BrakingAndDive},

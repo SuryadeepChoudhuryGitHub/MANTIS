@@ -45,4 +45,24 @@ PlanetaryEnvironment createMarsEnvironment() {
     return env;
 }
 
+PlanetaryEnvironment createMoonEnvironment() {
+    PlanetaryEnvironment env{};
+    env.id = "moon";
+    env.displayName = "Moon (Lunar Highlands)";
+    env.gravity = 1.62;
+    env.airDensity = 0.000;
+    env.ambientPressure = 0.0;
+    env.temperatureKelvin = 220.0;
+    env.solarIrradiance = 1361.0;
+    // Lunar vacuum sky: pure black space, brilliant solar disc
+    env.skyZenithColor = Color3{0.001f, 0.001f, 0.002f};
+    env.skyMidColor = Color3{0.002f, 0.002f, 0.004f};
+    env.skyHorizonColor = Color3{0.008f, 0.008f, 0.012f};
+    env.groundHazeColor = Color3{0.18f, 0.18f, 0.20f};
+    env.sunColor = Color3{2.20f, 2.18f, 2.15f};
+    env.sunDiscScale = 1.0f;
+    env.dustExtinction = 0.0f;
+    return env;
+}
+
 } // namespace torquelab

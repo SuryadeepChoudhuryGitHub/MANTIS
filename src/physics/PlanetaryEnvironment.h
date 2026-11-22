@@ -32,5 +32,6 @@ struct PlanetaryEnvironment {
 
 PlanetaryEnvironment createEarthEnvironment();
 PlanetaryEnvironment createMarsEnvironment();
+PlanetaryEnvironment createMoonEnvironment();
 
 } // namespace torquelab

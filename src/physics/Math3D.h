@@ -30,6 +30,14 @@ inline constexpr double RAD_PER_SEC_TO_RPM = 60.0 / (2.0 * PI_D);
 inline constexpr double MPS_TO_KMH = 3.6;
 inline constexpr double KMH_TO_MPS = 1.0 / 3.6;
 
+struct Vec2 {
+    double x{0.0};
+    double y{0.0};
+
+    constexpr Vec2() = default;
+    constexpr Vec2(double x_, double y_) : x(x_), y(y_) {}
+};
+
 struct Vec3 {
     double x{0.0};
     double y{0.0};

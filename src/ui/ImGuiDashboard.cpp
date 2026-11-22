@@ -95,7 +95,13 @@ void ImGuiDashboard::render(
     float* iblIntensity,
     int* diagnosticMode,
     const GpuHardwareInfo* gpuInfo,
-    const TerrainManager* terrainManager
+    const TerrainManager* terrainManager,
+    MinimapRenderer* minimapRenderer,
+    PathFollower* pathFollower,
+    const NavGrid* navGrid,
+    AStarPlanner* planner,
+    Vec3* selectedDestination,
+    bool* hasDestination
 ) {
     if (!paused) {
         m_history.push_back(TelemetrySample{
@@ -124,6 +130,19 @@ void ImGuiDashboard::render(
     renderLeftPanels(vehicle, windowHeight, useImportedModel, hasImportedModel, modelName, visualDebugEnabled, collisionWireframeEnabled, inputController, activeModel, exposure, iblIntensity, diagnosticMode, gpuInfo, terrainManager);
     if (telemetryEnabled) {
         renderRightTelemetryPanel(snap, fps, physicsStepTimeMs, windowWidth, windowHeight, gpuInfo);
+    }
+    if (minimapEnabled && minimapRenderer && pathFollower && navGrid && planner && selectedDestination && hasDestination) {
+        renderMinimapAndNavigationWindow(
+            vehicle,
+            *minimapRenderer,
+            *pathFollower,
+            *navGrid,
+            *planner,
+            *selectedDestination,
+            *hasDestination,
+            windowWidth,
+            windowHeight
+        );
     }
     renderBottomInstrumentCluster(snap, inputs, vehicle.config.maxRpm, windowWidth, windowHeight);
 
@@ -296,6 +315,13 @@ void ImGuiDashboard::renderTopBar(
             if (m_callbacks.onToggleTelemetry) m_callbacks.onToggleTelemetry();
         }
         if (telemetryEnabled) ImGui::PopStyleColor();
+        ImGui::SameLine();
+
+        if (minimapEnabled) ImGui::PushStyleColor(ImGuiCol_Button, hexToImVec4(0x059669, 0.95f));
+        if (ImGui::SmallButton("Minimap (M)")) {
+            minimapEnabled = !minimapEnabled;
+        }
+        if (minimapEnabled) ImGui::PopStyleColor();
         ImGui::SameLine();
 
         ImGui::PushStyleColor(ImGuiCol_Button, hexToImVec4(0x059669, 0.95f));
@@ -1423,6 +1449,283 @@ void ImGuiDashboard::renderBottomInstrumentCluster(
                             w.id.c_str(), w.wheelCenterWorld.y - snap.chassisPosition.y, radToDeg(w.steeringAngle));
             }
             ImGui::TreePop();
+        }
+    }
+    ImGui::End();
+}
+
+void ImGuiDashboard::renderMinimapAndNavigationWindow(
+    VehicleDynamics& vehicle,
+    MinimapRenderer& minimap,
+    PathFollower& pathFollower,
+    const NavGrid& navGrid,
+    AStarPlanner& planner,
+    Vec3& selectedDestination,
+    bool& hasDestination,
+    int windowWidth,
+    int windowHeight
+) {
+    (void)windowHeight;
+    ImGuiIO& io = ImGui::GetIO();
+    ImGui::SetNextWindowPos(ImVec2(static_cast<float>(windowWidth) - 430.0f, 60.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(410.0f, 660.0f), ImGuiCond_FirstUseEver);
+
+    if (ImGui::Begin("Planetary Minimap & Navigation (M)###MinimapWindow", &minimapEnabled)) {
+        // Mode Selection
+        int modeIdx = (minimap.getDisplayMode() == MinimapDisplayMode::Textured) ? 0 : 1;
+        if (ImGui::RadioButton("Textured", modeIdx == 0)) {
+            minimap.setDisplayMode(MinimapDisplayMode::Textured);
+        }
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Elevation Contour Heatmap", modeIdx == 1)) {
+            minimap.setDisplayMode(MinimapDisplayMode::ElevationHeatmap);
+        }
+
+        // Viewport and Zoom Controls
+        if (ImGui::Button(" [-] ")) {
+            minimap.zoomDelta(-0.25);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(" [+] ")) {
+            minimap.zoomDelta(+0.25);
+        }
+        ImGui::SameLine();
+        float currentZoom = static_cast<float>(minimap.getZoom());
+        ImGui::SetNextItemWidth(90.0f);
+        if (ImGui::SliderFloat("##ZoomSlider", &currentZoom, 0.2f, 5.0f, "%.2fx")) {
+            minimap.setZoom(static_cast<double>(currentZoom));
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Recenter")) {
+            minimap.recenterOnRover();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Reset")) {
+            minimap.resetView();
+        }
+        ImGui::SameLine();
+        ImGui::Checkbox("Follow", &minimap.getViewport().followRover);
+
+        // Minimap Image Surface
+        const float mapDim = std::min(ImGui::GetContentRegionAvail().x, 380.0f);
+        const ImVec2 p0 = ImGui::GetCursorScreenPos();
+        const ImVec2 p1 = ImVec2(p0.x + mapDim, p0.y + mapDim);
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+        const Vec3 roverPos = vehicle.body.getPosition();
+        constexpr double kTotalWorld = 512.0;
+        const double span = kTotalWorld / minimap.getZoom();
+        const double centerX = minimap.getViewport().followRover ? (roverPos.x + minimap.getViewport().panOffsetX) : minimap.getViewport().panOffsetX;
+        const double centerZ = minimap.getViewport().followRover ? (roverPos.z + minimap.getViewport().panOffsetZ) : minimap.getViewport().panOffsetZ;
+
+        const float u0 = static_cast<float>((centerX - 0.5 * span + 256.0) / kTotalWorld);
+        const float u1 = static_cast<float>((centerX + 0.5 * span + 256.0) / kTotalWorld);
+        const float v0 = static_cast<float>((256.0 - (centerZ + 0.5 * span)) / kTotalWorld);
+        const float v1 = static_cast<float>((256.0 - (centerZ - 0.5 * span)) / kTotalWorld);
+
+        // Render OpenGL Texture
+        ImGui::Image(
+            static_cast<ImTextureID>(minimap.getTextureId()),
+            ImVec2(mapDim, mapDim),
+            ImVec2(u0, v0),
+            ImVec2(u1, v1)
+        );
+
+        const bool isMapHovered = ImGui::IsItemHovered();
+
+        // Click to Select Destination
+        if (isMapHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+            Vec3 clickedWorld;
+            if (minimap.screenToWorld(io.MousePos.x, io.MousePos.y, p0.x, p0.y, mapDim, mapDim, roverPos, clickedWorld)) {
+                clickedWorld.y = navGrid.getElevationAt(clickedWorld.x, clickedWorld.z);
+                selectedDestination = clickedWorld;
+                hasDestination = true;
+
+                // Auto-plan route
+                PlanResult planRes = planner.plan(navGrid, roverPos, selectedDestination);
+                if (planRes.success) {
+                    pathFollower.setPath(planRes.waypoints);
+                }
+            }
+        }
+
+        // Right-Click Drag to Pan
+        if (isMapHovered && ImGui::IsMouseDragging(ImGuiMouseButton_Right)) {
+            const ImVec2 drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Right);
+            ImGui::ResetMouseDragDelta(ImGuiMouseButton_Right);
+            minimap.pan(-drag.x * (span / mapDim), drag.y * (span / mapDim));
+        }
+
+        // Mouse Wheel to Zoom
+        if (isMapHovered && std::abs(io.MouseWheel) > 0.01f) {
+            minimap.zoomDelta(static_cast<double>(io.MouseWheel) * 0.2);
+        }
+
+        // Overlays
+        drawList->PushClipRect(p0, p1, true);
+
+        // 1. Draw Planned Path Waypoints and connecting polyline
+        const auto& waypoints = pathFollower.getWaypoints();
+        if (waypoints.size() >= 2) {
+            for (size_t i = 0; i + 1 < waypoints.size(); ++i) {
+                float sx1, sy1, sx2, sy2;
+                if (minimap.worldToScreen(waypoints[i].positionWorld, p0.x, p0.y, mapDim, mapDim, roverPos, sx1, sy1) &&
+                    minimap.worldToScreen(waypoints[i + 1].positionWorld, p0.x, p0.y, mapDim, mapDim, roverPos, sx2, sy2)) {
+                    drawList->AddLine(ImVec2(sx1, sy1), ImVec2(sx2, sy2), IM_COL32(34, 211, 238, 230), 2.5f);
+                    drawList->AddCircleFilled(ImVec2(sx1, sy1), 2.5f, IM_COL32(56, 189, 248, 255));
+                }
+            }
+        }
+
+        // 2. Draw Destination Marker
+        if (hasDestination) {
+            float dx, dy;
+            if (minimap.worldToScreen(selectedDestination, p0.x, p0.y, mapDim, mapDim, roverPos, dx, dy)) {
+                drawList->AddCircle(ImVec2(dx, dy), 8.0f, IM_COL32(239, 68, 68, 255), 16, 2.0f);
+                drawList->AddCircleFilled(ImVec2(dx, dy), 4.0f, IM_COL32(239, 68, 68, 255));
+                drawList->AddText(ImVec2(dx + 9.0f, dy - 8.0f), IM_COL32(255, 255, 255, 255), "DEST");
+            }
+        }
+
+        // 3. Draw Rover Marker & Heading Arrow
+        float rx, ry;
+        if (minimap.worldToScreen(roverPos, p0.x, p0.y, mapDim, mapDim, roverPos, rx, ry)) {
+            drawList->AddCircleFilled(ImVec2(rx, ry), 5.5f, IM_COL32(16, 185, 129, 255));
+            drawList->AddCircle(ImVec2(rx, ry), 7.0f, IM_COL32(255, 255, 255, 240), 16, 1.5f);
+
+            // Heading pointer
+            const VehicleBasis basis = getVehicleBasis(vehicle.body.getRotation());
+            const Vec3 fwd = basis.forward;
+            const Vec3 tipPos = vec3Add(roverPos, vec3Scale(fwd, span * 0.05));
+            float hx, hy;
+            if (minimap.worldToScreen(tipPos, p0.x, p0.y, mapDim, mapDim, roverPos, hx, hy)) {
+                drawList->AddLine(ImVec2(rx, ry), ImVec2(hx, hy), IM_COL32(250, 204, 21, 255), 2.5f);
+                drawList->AddCircleFilled(ImVec2(hx, hy), 3.0f, IM_COL32(250, 204, 21, 255));
+            }
+        }
+
+        // 4. Draw North Compass Marker in Top-Right
+        const ImVec2 northPos(p1.x - 28.0f, p0.y + 16.0f);
+        drawList->AddTriangleFilled(
+            northPos,
+            ImVec2(northPos.x - 5.0f, northPos.y + 12.0f),
+            ImVec2(northPos.x + 5.0f, northPos.y + 12.0f),
+            IM_COL32(239, 68, 68, 255)
+        );
+        drawList->AddText(ImVec2(northPos.x - 4.0f, northPos.y + 13.0f), IM_COL32(255, 255, 255, 220), "N");
+
+        // 5. Draw Metric Scale Bar in Bottom-Left
+        const double barWorldM = std::max(5.0, std::round((span * 0.2) / 10.0) * 10.0);
+        const float barPixelLen = static_cast<float>((barWorldM / span) * mapDim);
+        const ImVec2 barStart(p0.x + 12.0f, p1.y - 14.0f);
+        const ImVec2 barEnd(p0.x + 12.0f + barPixelLen, p1.y - 14.0f);
+        drawList->AddLine(barStart, barEnd, IM_COL32(255, 255, 255, 240), 3.0f);
+        drawList->AddLine(barStart, ImVec2(barStart.x, barStart.y - 5.0f), IM_COL32(255, 255, 255, 240), 2.0f);
+        drawList->AddLine(barEnd, ImVec2(barEnd.x, barEnd.y - 5.0f), IM_COL32(255, 255, 255, 240), 2.0f);
+        char scaleBuf[32];
+        std::snprintf(scaleBuf, sizeof(scaleBuf), "%.0f m", barWorldM);
+        drawList->AddText(ImVec2(barStart.x + 4.0f, barStart.y - 16.0f), IM_COL32(255, 255, 255, 240), scaleBuf);
+
+        // 6. Draw Elevation Legend if in Elevation Heatmap Mode
+        if (minimap.getDisplayMode() == MinimapDisplayMode::ElevationHeatmap) {
+            const float legX = p1.x - 14.0f;
+            const float legY0 = p0.y + 40.0f;
+            const float legH = 100.0f;
+            for (int k = 0; k < 20; ++k) {
+                const float frac0 = static_cast<float>(k) / 20.0f;
+                const float frac1 = static_cast<float>(k + 1) / 20.0f;
+                const Color3 c0 = MinimapRenderer::sampleElevationHeatmapColor(1.0 - frac0);
+                const ImU32 col = IM_COL32(
+                    static_cast<uint8_t>(c0.r * 255),
+                    static_cast<uint8_t>(c0.g * 255),
+                    static_cast<uint8_t>(c0.b * 255),
+                    240
+                );
+                drawList->AddRectFilled(
+                    ImVec2(legX, legY0 + frac0 * legH),
+                    ImVec2(legX + 8.0f, legY0 + frac1 * legH),
+                    col
+                );
+            }
+            char minElevStr[16], maxElevStr[16];
+            std::snprintf(maxElevStr, sizeof(maxElevStr), "%.0fm", minimap.getMaxElevation());
+            std::snprintf(minElevStr, sizeof(minElevStr), "%.0fm", minimap.getMinElevation());
+            drawList->AddText(ImVec2(legX - 35.0f, legY0 - 4.0f), IM_COL32(255, 255, 255, 220), maxElevStr);
+            drawList->AddText(ImVec2(legX - 35.0f, legY0 + legH - 8.0f), IM_COL32(255, 255, 255, 220), minElevStr);
+        }
+
+        drawList->PopClipRect();
+
+        ImGui::Separator();
+
+        // Autonomy Controls & Telemetry
+        const auto& telem = pathFollower.getTelemetry();
+        ImGui::Text("Autonomy State: ");
+        ImGui::SameLine();
+        switch (telem.state) {
+            case NavState::Idle:
+                ImGui::TextColored(hexToImVec4(0x94a3b8), "IDLE (Click minimap to set destination)");
+                break;
+            case NavState::Planning:
+                ImGui::TextColored(hexToImVec4(0x38bdf8), "PLANNING ROUTE...");
+                break;
+            case NavState::Navigating:
+                ImGui::TextColored(hexToImVec4(0x22c55e), "NAVIGATING TO DESTINATION");
+                break;
+            case NavState::Paused:
+                ImGui::TextColored(hexToImVec4(0xfacc15), "MISSION PAUSED");
+                break;
+            case NavState::Arrived:
+                ImGui::TextColored(hexToImVec4(0x38bdf8), "DESTINATION REACHED (ARRIVED)");
+                break;
+            case NavState::Stuck:
+                ImGui::TextColored(hexToImVec4(0xf97316), "ROVER STUCK (OBSTACLE DETECTED)");
+                break;
+            case NavState::EmergencyStopped:
+                ImGui::TextColored(hexToImVec4(0xef4444), "EMERGENCY STOP ENGAGED");
+                break;
+        }
+
+        // Action Buttons
+        if (telem.state != NavState::Navigating) {
+            if (ImGui::Button("Start Autonomous Mission") && hasDestination) {
+                pathFollower.startNavigation();
+            }
+        } else {
+            if (ImGui::Button("Pause Mission")) {
+                pathFollower.pauseNavigation();
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Emergency Stop")) {
+            pathFollower.emergencyStop();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Replan") && hasDestination) {
+            PlanResult res = planner.plan(navGrid, roverPos, selectedDestination);
+            if (res.success) {
+                pathFollower.setPath(res.waypoints);
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear")) {
+            pathFollower.clearPath();
+            hasDestination = false;
+        }
+
+        // Navigation Telemetry Metrics
+        if (hasDestination) {
+            ImGui::Text("Destination: (%.1f, %.1f) | Dist: %.1f m", selectedDestination.x, selectedDestination.z, telem.distanceToTargetM);
+            ImGui::Text("Waypoints: %zu / %zu | Cross-Track: %.2f m | Head Err: %+.1f deg",
+                        telem.currentWaypointIndex + 1, telem.totalWaypoints, telem.crossTrackErrorM, radToDeg(telem.headingErrorRad));
+            ImGui::Text("Target Speed: %.2f m/s (%.1f km/h) | Cmd Thr: %.0f%% | Steer: %+.1f deg",
+                        telem.targetSpeedMPerSec, telem.targetSpeedMPerSec * 3.6, telem.commandedThrottle * 100.0, radToDeg(telem.commandedSteering));
+            if (telem.totalWaypoints > 0) {
+                const float progress = static_cast<float>(telem.currentWaypointIndex) / static_cast<float>(telem.totalWaypoints);
+                ImGui::ProgressBar(progress, ImVec2(-1.0f, 14.0f));
+            }
+        } else {
+            ImGui::TextDisabled("No active navigation route. Click on minimap to select target.");
         }
     }
     ImGui::End();
