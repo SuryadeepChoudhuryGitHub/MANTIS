@@ -76,7 +76,7 @@ public:
 
     /** User control actions */
     void startNavigation();
-    void pauseNavigation();
+    void pauseNavigation(bool userExplicit = false);
     void resumeNavigation();
     void emergencyStop();
 
@@ -94,6 +94,11 @@ public:
     const PathFollowerTelemetry& getTelemetry() const { return m_telemetry; }
     NavState getState() const { return m_telemetry.state; }
     bool isNavigating() const { return m_telemetry.state == NavState::Navigating; }
+    bool hasActiveMission() const {
+        return !m_waypoints.empty() &&
+               m_telemetry.state != NavState::Arrived &&
+               m_telemetry.state != NavState::EmergencyStopped;
+    }
     bool isReplanRequested() const { return m_telemetry.isReplanRequested; }
     void clearReplanRequest() { m_telemetry.isReplanRequested = false; }
     const std::vector<PathWaypoint>& getWaypoints() const { return m_waypoints; }
@@ -113,6 +118,8 @@ private:
 
     double m_stuckTimer{0.0};
     double m_prevHeadingError{0.0};
+    double m_manualOverrideTimer{0.0};
+    bool m_explicitPause{false};
 };
 
 } // namespace torquelab

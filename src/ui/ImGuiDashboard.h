@@ -168,9 +168,12 @@ private:
         const GpuHardwareInfo* gpuInfo = nullptr
     );
     void renderBottomInstrumentCluster(
+        const VehicleDynamics& vehicle,
         const VehicleTelemetrySnapshot& snap,
         const VehicleControlInputs& inputs,
-        double maxRpm,
+        const PathFollower* pathFollower,
+        const Vec3* selectedDestination,
+        bool hasDestination,
         int windowWidth,
         int windowHeight
     );

@@ -95,6 +95,7 @@ public:
     float getLiveLookX() const { return static_cast<float>(m_cameraLook.x); }
     float getLiveLookY() const { return static_cast<float>(m_cameraLook.y); }
     float getResetHoldProgress() const;
+    bool isManualDrivingActive() const { return m_isHumanDrivingActive; }
 
     // Vibration Feedback
     VibrationManager& getVibrationManager() { return m_vibration; }
@@ -170,6 +171,7 @@ private:
     double m_liveBrake{0.0};
     double m_liveSteer{0.0};
     double m_liveHandbrake{0.0};
+    bool m_isHumanDrivingActive{false};
 };
 
 } // namespace torquelab

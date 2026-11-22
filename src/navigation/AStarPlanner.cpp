@@ -41,14 +41,26 @@ PlanResult AStarPlanner::plan(
     const NavNode* goalNode  = grid.getNode(goalGx, goalGz);
 
     if (!startNode || startNode->traversability != CellTraversability::Traversable) {
-        // If rover currently sits on border cell, try 8-neighbor fallback
-        for (const auto* n : grid.getNeighbors(startGx, startGz)) {
-            if (n && n->traversability == CellTraversability::Traversable) {
-                startNode = n;
-                startGx = n->gridX;
-                startGz = n->gridZ;
-                break;
+        // If rover currently sits on border cell or near an obstacle, find closest traversable node
+        double bestDist = 1e9;
+        const NavNode* alternativeStart = nullptr;
+        constexpr int kStartSearchR = 8;
+        for (int rz = -kStartSearchR; rz <= kStartSearchR; ++rz) {
+            for (int rx = -kStartSearchR; rx <= kStartSearchR; ++rx) {
+                const NavNode* cand = grid.getNode(startGx + rx, startGz + rz);
+                if (cand && cand->traversability == CellTraversability::Traversable) {
+                    const double d2 = static_cast<double>(rx * rx + rz * rz);
+                    if (d2 < bestDist) {
+                        bestDist = d2;
+                        alternativeStart = cand;
+                    }
+                }
             }
+        }
+        if (alternativeStart) {
+            startNode = alternativeStart;
+            startGx = alternativeStart->gridX;
+            startGz = alternativeStart->gridZ;
         }
     }
 

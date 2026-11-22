@@ -518,6 +518,10 @@ VehicleControlInputs InputControllerGLFW::sampleInputs(GLFWwindow* window, doubl
     m_liveSteer = clamp(finalSteer, -1.0, 1.0);
     m_liveHandbrake = clamp(finalHandbrake, 0.0, 1.0);
 
+    const bool kbActive = (wHeld || sHeld || aHeld || dHeld || spaceHeld);
+    const bool padActive = (padThrottle > 0.20 || padBrake > 0.20 || std::abs(padSteer) > 0.25 || padHandbrake > 0.20);
+    m_isHumanDrivingActive = kbActive || padActive;
+
     return VehicleControlInputs{
         m_liveThrottle,
         m_liveBrake,

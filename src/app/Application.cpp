@@ -22,7 +22,7 @@ Application::~Application() {
 bool Application::init(int width, int height, bool visible) {
     s_activeApp = this;
     if (!glfwInit()) {
-        std::cerr << "[TorqueLabNative] Failed to initialize GLFW." << std::endl;
+        std::cerr << "[ProjectARES] Failed to initialize GLFW." << std::endl;
         return false;
     }
 
@@ -465,7 +465,7 @@ int Application::run(int maxFrames) {
         const VehicleControlInputs inputs = m_inputController->sampleInputs(m_window, frameDt);
         const double t2 = glfwGetTime();
 
-        const bool humanInterfered = (std::abs(inputs.steering) > 0.1 || inputs.throttle > 0.05 || inputs.brake > 0.05);
+        const bool humanInterfered = m_inputController->isManualDrivingActive();
         if (m_pathFollower.isNavigating()) {
             m_pathFollower.update(frameDt, *m_physicsWorld->vehicle, humanInterfered);
             if (m_pathFollower.isReplanRequested() && m_hasDestination) {
@@ -474,10 +474,23 @@ int Application::run(int maxFrames) {
                 PlanResult repRes = m_planner.plan(m_navGrid, roverPos, m_selectedDestination);
                 if (repRes.success) {
                     m_pathFollower.setPath(repRes.waypoints);
+                    m_pathFollower.startNavigation();
                 }
             }
         } else {
             m_physicsWorld->vehicle->currentInputs = inputs;
+            if (m_pathFollower.hasActiveMission() && !humanInterfered) {
+                m_pathFollower.update(frameDt, *m_physicsWorld->vehicle, false);
+                if (m_pathFollower.isReplanRequested() && m_hasDestination) {
+                    m_pathFollower.clearReplanRequest();
+                    const Vec3 roverPos = m_physicsWorld->vehicle->body.getPosition();
+                    PlanResult repRes = m_planner.plan(m_navGrid, roverPos, m_selectedDestination);
+                    if (repRes.success) {
+                        m_pathFollower.setPath(repRes.waypoints);
+                        m_pathFollower.startNavigation();
+                    }
+                }
+            }
         }
         if (maxFrames == 600) {
             m_physicsWorld->vehicle->currentInputs.throttle = 1.0;

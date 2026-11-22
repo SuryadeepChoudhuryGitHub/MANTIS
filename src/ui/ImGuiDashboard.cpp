@@ -144,7 +144,16 @@ void ImGuiDashboard::render(
             windowHeight
         );
     }
-    renderBottomInstrumentCluster(snap, inputs, vehicle.config.maxRpm, windowWidth, windowHeight);
+    renderBottomInstrumentCluster(
+        vehicle,
+        snap,
+        inputs,
+        pathFollower,
+        selectedDestination,
+        hasDestination ? *hasDestination : false,
+        windowWidth,
+        windowHeight
+    );
 
     // Paused Banner or Validation Toast
     if (paused) {
@@ -271,7 +280,7 @@ void ImGuiDashboard::renderTopBar(
             ImGui::SameLine();
         }
 
-        // Vehicle Dropdown Selector (Top Bar)
+        // Rover Dropdown Selector (Top Bar)
         ImGui::SetNextItemWidth(170.0f);
         std::vector<VehicleOption> topVehicleList = m_availableVehicles;
         if (topVehicleList.empty()) {
@@ -283,23 +292,23 @@ void ImGuiDashboard::renderTopBar(
             };
         }
 
-        int topCarIdx = 0;
-        std::vector<const char*> carNames;
-        carNames.reserve(topVehicleList.size());
+        int topRoverIdx = 0;
+        std::vector<const char*> roverNames;
+        roverNames.reserve(topVehicleList.size());
         for (size_t i = 0; i < topVehicleList.size(); ++i) {
-            carNames.push_back(topVehicleList[i].name.c_str());
+            roverNames.push_back(topVehicleList[i].name.c_str());
             if (topVehicleList[i].id == vehicleId) {
-                topCarIdx = static_cast<int>(i);
+                topRoverIdx = static_cast<int>(i);
             }
         }
 
-        if (ImGui::Combo("##TopCarSelect", &topCarIdx, carNames.data(), static_cast<int>(carNames.size()))) {
-            if (m_callbacks.onSelectVehicle && topCarIdx >= 0 && topCarIdx < static_cast<int>(topVehicleList.size())) {
-                m_callbacks.onSelectVehicle(topVehicleList[static_cast<size_t>(topCarIdx)].id);
+        if (ImGui::Combo("##TopRoverSelect", &topRoverIdx, roverNames.data(), static_cast<int>(roverNames.size()))) {
+            if (m_callbacks.onSelectVehicle && topRoverIdx >= 0 && topRoverIdx < static_cast<int>(topVehicleList.size())) {
+                m_callbacks.onSelectVehicle(topVehicleList[static_cast<size_t>(topRoverIdx)].id);
             }
         }
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Select active vehicle or cycle with (B) / Gamepad (RB)");
+            ImGui::SetTooltip("Select active exploration rover or cycle with (B) / Gamepad (RB)");
         }
         ImGui::SameLine();
 
@@ -555,105 +564,64 @@ void ImGuiDashboard::renderLeftPanels(
             }
         }
 
-        if (ImGui::CollapsingHeader("PNEUMATIC TYRE SIMULATION & DEFORMATION", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::TextColored(hexToImVec4(0x38bdf8), "TYRE INFLATION PRESSURE (PNEUMATIC):");
-
-            float frontPress = static_cast<float>(vehicle.getTirePressureKpa(0));
-            float rearPress  = static_cast<float>(vehicle.getTirePressureKpa(2));
-
-            char frontLabel[64];
-            std::snprintf(frontLabel, sizeof(frontLabel), "%.0f kPa (%.1f PSI)", frontPress, frontPress * 0.145038f);
-            if (ImGui::SliderFloat("Front Pressure", &frontPress, 50.0f, 360.0f, frontLabel)) {
-                vehicle.setTirePressureKpa(0, frontPress);
-                vehicle.setTirePressureKpa(1, frontPress);
-            }
-
-            char rearLabel[64];
-            std::snprintf(rearLabel, sizeof(rearLabel), "%.0f kPa (%.1f PSI)", rearPress, rearPress * 0.145038f);
-            if (ImGui::SliderFloat("Rear Pressure", &rearPress, 50.0f, 360.0f, rearLabel)) {
-                vehicle.setTirePressureKpa(2, rearPress);
-                vehicle.setTirePressureKpa(3, rearPress);
-            }
+        if (ImGui::CollapsingHeader("6-WHEEL ROCKER-BOGIE MOBILITY SUBSYSTEM", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::TextColored(hexToImVec4(0x38bdf8), "ROCKER-BOGIE PASSIVE EQUILIBRIUM:");
+            const auto& rb = vehicle.rockerBogie.getState();
+            ImGui::Text("Left Rocker:   %+5.1f deg | Right Rocker:  %+5.1f deg", radToDeg(rb.leftRockerPitch), radToDeg(rb.rightRockerPitch));
+            ImGui::Text("Left Bogie:    %+5.1f deg | Right Bogie:   %+5.1f deg", radToDeg(rb.leftBogiePitch), radToDeg(rb.rightBogiePitch));
+            ImGui::Text("Diff Crossbar: %+5.1f deg | Contact Wheels: %d / 6", radToDeg(rb.differentialAngle), rb.wheelsInContactCount);
 
             ImGui::Spacing();
-            ImGui::Text("Quick Presets:");
-            if (ImGui::SmallButton("Standard (220)")) {
-                for (int w = 0; w < 4; ++w) vehicle.setTirePressureKpa(w, 220.0);
-            }
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Track (280)")) {
-                for (int w = 0; w < 4; ++w) vehicle.setTirePressureKpa(w, 280.0);
-            }
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Soft (140)")) {
-                for (int w = 0; w < 4; ++w) vehicle.setTirePressureKpa(w, 140.0);
-            }
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Flat (40)")) {
-                for (int w = 0; w < 4; ++w) vehicle.setTirePressureKpa(w, 40.0);
-            }
-
-            ImGui::Spacing();
-            bool flPunctured = vehicle.wheels[0].tireModel.getState().isPunctured;
-            if (ImGui::Checkbox("Puncture FL Tire (Slow Leak)", &flPunctured)) {
-                vehicle.setTirePunctured(0, flPunctured, 4500.0);
-            }
-            ImGui::SameLine();
-            const int numWheelsConfig = vehicle.config.numWheels >= 6 ? 6 : 4;
-            if (ImGui::SmallButton("Inflate & Repair All")) {
-                for (int w = 0; w < numWheelsConfig; ++w) {
-                    vehicle.setTirePunctured(w, false);
-                    vehicle.setTirePressureKpa(w, 220.0);
-                }
-            }
-
-            ImGui::Spacing();
-            ImGui::TextColored(hexToImVec4(0x4ade80), "STRUCTURAL WHEEL/TYRE DEFORMATION:");
-            if (ImGui::BeginTable("##TyreDeformTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+            ImGui::TextColored(hexToImVec4(0x4ade80), "6-WHEEL GROUND INTERACTION & DRIVE FORCES:");
+            if (ImGui::BeginTable("##RoverWheelTable", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
                 ImGui::TableSetupColumn("Wheel", ImGuiTableColumnFlags_WidthFixed, 42.0f);
-                ImGui::TableSetupColumn("Press.", ImGuiTableColumnFlags_WidthFixed, 55.0f);
-                ImGui::TableSetupColumn("dr (mm)", ImGuiTableColumnFlags_WidthFixed, 55.0f);
-                ImGui::TableSetupColumn("dy (mm)", ImGuiTableColumnFlags_WidthFixed, 55.0f);
-                ImGui::TableSetupColumn("Patch (cm)", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableSetupColumn("Load Fz", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+                ImGui::TableSetupColumn("Drive Trq", ImGuiTableColumnFlags_WidthFixed, 65.0f);
+                ImGui::TableSetupColumn("Tract Fx", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+                ImGui::TableSetupColumn("Slip k", ImGuiTableColumnFlags_WidthFixed, 50.0f);
+                ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthStretch);
                 ImGui::TableHeadersRow();
 
-                static const char* const wNames[6] = {"FL", "FR", "RL", "RR", "ML", "MR"};
-                for (int w = 0; w < numWheelsConfig; ++w) {
-                    const auto& tState = vehicle.wheels[static_cast<size_t>(w)].tireModel.getState();
+                static const char* const wRoverNames[6] = {"FL", "FR", "RL", "RR", "ML", "MR"};
+                const int nW = vehicle.config.numWheels >= 6 ? 6 : 4;
+                for (int w = 0; w < nW; ++w) {
+                    const auto& ws = vehicle.wheels[static_cast<size_t>(w)];
                     ImGui::TableNextRow();
                     ImGui::TableSetColumnIndex(0);
-                    ImGui::Text("%s", wNames[w]);
+                    ImGui::Text("%s", wRoverNames[w]);
                     ImGui::TableSetColumnIndex(1);
-                    ImGui::Text("%.0f kPa", tState.pressurePa / 1000.0);
+                    ImGui::Text("%.0f N", ws.normalLoad);
                     ImGui::TableSetColumnIndex(2);
-                    ImGui::Text("%.1f", tState.radialDeformation * 1000.0);
+                    ImGui::Text("%.0f Nm", ws.driveTorque);
                     ImGui::TableSetColumnIndex(3);
-                    ImGui::Text("%.1f", tState.lateralDeformation * 1000.0);
+                    ImGui::Text("%.0f N", ws.longitudinalForce);
                     ImGui::TableSetColumnIndex(4);
-                    ImGui::Text("%.1fx%.1f", tState.contactPatchLength * 100.0, tState.contactPatchWidth * 100.0);
+                    ImGui::Text("%+.2f", ws.slipRatio);
+                    ImGui::TableSetColumnIndex(5);
+                    if (ws.hasObstacleContact) {
+                        ImGui::TextColored(hexToImVec4(0xf97316), "Obstacle");
+                    } else if (ws.inContact) {
+                        ImGui::TextColored(hexToImVec4(0x22c55e), "Traction");
+                    } else {
+                        ImGui::TextColored(hexToImVec4(0x64748b), "Airborne");
+                    }
                 }
                 ImGui::EndTable();
             }
 
             ImGui::Spacing();
-            ImGui::TextColored(hexToImVec4(0x4ade80), "GROUND INTERACTION & CONSTRAINT STATUS:");
-            ImGui::BulletText("Physical Penetration: 0.0 mm (Exact Raycast Contact)");
-            ImGui::BulletText("Visual Tread Penetration: 0.0 mm (World Ground Constraint)");
-            ImGui::BulletText("Rigid Rim Clearance: Protected (Zero Rubber Deformation)");
-
-            ImGui::Spacing();
-            ImGui::TextColored(hexToImVec4(0xfb923c), "THERMODYNAMICS & WEAR:");
-            static const char* const wNamesDiag[6] = {"FL", "FR", "RL", "RR", "ML", "MR"};
-            for (int w = 0; w < numWheelsConfig; ++w) {
-                const auto& tState = vehicle.wheels[static_cast<size_t>(w)].tireModel.getState();
-                ImGui::Text("%s: %.1f deg C | Wear: %.1f%% | %d/%d contacts",
-                    wNamesDiag[w],
-                    tState.temperatureC,
-                    tState.wearLevel * 100.0,
-                    tState.activeContactSamples,
-                    tState.totalContactSamples
-                );
+            ImGui::TextColored(hexToImVec4(0xfacc15), "STABILITY & TRACTION CONTROL:");
+            bool stictionActive = vehicle.config.enableStationaryHold;
+            if (ImGui::Checkbox("Stationary Hold & Stiction (Anti-Rollback)", &stictionActive)) {
+                vehicle.config.enableStationaryHold = stictionActive;
+                if (m_callbacks.onToggleStationaryHold) {
+                    m_callbacks.onToggleStationaryHold(stictionActive);
+                }
             }
+            ImGui::BulletText("Rigid Aluminium Cleated Rims: 52.5 cm Diameter");
+            ImGui::BulletText("Ground Contact Constraint: Exact Multi-Raycast");
+            ImGui::BulletText("Weight Transfer: 3-Point Trunnion + Crossbar");
+        }
         }
 
         if (ImGui::CollapsingHeader("PBR MATERIAL INSPECTOR & LIGHTING", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -762,22 +730,22 @@ void ImGuiDashboard::renderLeftPanels(
             }
         }
 
-        if (ImGui::CollapsingHeader("DRIVING CONTROLS", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::TextDisabled("W/Up:");    ImGui::SameLine(90); ImGui::TextUnformatted("Throttle");
-            ImGui::TextDisabled("S/Down:");  ImGui::SameLine(90); ImGui::TextUnformatted("Brake / Reverse");
-            ImGui::TextDisabled("A / D:");   ImGui::SameLine(90); ImGui::TextUnformatted("Steer Left / Right");
-            ImGui::TextDisabled("Space:");   ImGui::SameLine(90); ImGui::TextUnformatted("Handbrake (Rear)");
-            ImGui::TextDisabled("M + E/Q:"); ImGui::SameLine(90); ImGui::TextUnformatted("Auto/Manual Shift");
-            ImGui::TextDisabled("B / V:");   ImGui::SameLine(90); ImGui::TextUnformatted("Toggle Model / Alignment");
-            ImGui::TextDisabled("R / C:");   ImGui::SameLine(90); ImGui::TextUnformatted("Reset / Cycle Cam");
-            ImGui::TextDisabled("T / G:");   ImGui::SameLine(90); ImGui::TextUnformatted("Telemetry / 3D Vectors");
-            ImGui::TextDisabled("1 - 7:");   ImGui::SameLine(90); ImGui::TextUnformatted("Teleport Test Zones");
+        if (ImGui::CollapsingHeader("ROVER MOBILITY & EXPLORATION CONTROLS", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::TextDisabled("W / Up:");    ImGui::SameLine(90); ImGui::TextUnformatted("Drive Forward");
+            ImGui::TextDisabled("S / Down:");  ImGui::SameLine(90); ImGui::TextUnformatted("Reverse / Service Brake");
+            ImGui::TextDisabled("A / D:");     ImGui::SameLine(90); ImGui::TextUnformatted("4-Corner Steering (L/R)");
+            ImGui::TextDisabled("Space:");     ImGui::SameLine(90); ImGui::TextUnformatted("Holding Brake / Stiction");
+            ImGui::TextDisabled("M / Tab:");   ImGui::SameLine(90); ImGui::TextUnformatted("Topographical Minimap");
+            ImGui::TextDisabled("B / V:");     ImGui::SameLine(90); ImGui::TextUnformatted("Cycle Rover / Alignment");
+            ImGui::TextDisabled("R / C:");     ImGui::SameLine(90); ImGui::TextUnformatted("Reset Rover / Cycle Cam");
+            ImGui::TextDisabled("T / G:");     ImGui::SameLine(90); ImGui::TextUnformatted("Telemetry / 3D Vectors");
+            ImGui::TextDisabled("1 - 7:");     ImGui::SameLine(90); ImGui::TextUnformatted("Traverse Test Locations");
         }
 
         renderControllerSettings(inputController);
 
         ImGui::Separator();
-        ImGui::TextColored(hexToImVec4(0x38bdf8), "LIVE ROVER TUNING LAB");
+        ImGui::TextColored(hexToImVec4(0x38bdf8), "PLANETARY ROVER MOBILITY TUNING");
         ImGui::SameLine(215.0f);
         if (ImGui::SmallButton("Defaults")) {
             if (vehicle.config.id == "curiosity_rover") {
@@ -794,96 +762,67 @@ void ImGuiDashboard::renderLeftPanels(
 
         VehicleConfig& c = vehicle.config;
 
-        // Drivetrain Layout Selector
-        int layoutIdx = (c.drivetrainLayout == DrivetrainLayout::RWD) ? 0
-                      : (c.drivetrainLayout == DrivetrainLayout::FWD) ? 1 : 2;
-        const char* layouts[] = {"RWD (Rear-Wheel Drive)", "FWD (Front-Wheel Drive)", "AWD (40/60 All-Wheel)"};
-        if (ImGui::Combo("Drivetrain", &layoutIdx, layouts, 3)) {
-            c.drivetrainLayout = (layoutIdx == 0) ? DrivetrainLayout::RWD
-                               : (layoutIdx == 1) ? DrivetrainLayout::FWD
-                                                  : DrivetrainLayout::AWD;
-        }
-
         // 1. Vehicle Mass
         float mass = static_cast<float>(c.mass);
-        if (ImGui::SliderFloat("Mass (kg)", &mass, 800.0f, 2600.0f, "%.0f kg")) {
+        if (ImGui::SliderFloat("Mass (kg)", &mass, 500.0f, 2000.0f, "%.0f kg")) {
             c.mass = static_cast<double>(mass);
             vehicle.body.syncMassProperties(c);
         }
 
         // 2. CoM Height Offset
         float comH = static_cast<float>(c.comHeightOffset);
-        if (ImGui::SliderFloat("CoM Height", &comH, -0.20f, 0.45f, "%+.2f m")) {
+        if (ImGui::SliderFloat("CoM Height", &comH, -0.30f, 0.30f, "%+.2f m")) {
             c.comHeightOffset = static_cast<double>(comH);
             vehicle.body.syncMassProperties(c);
         }
 
-        // 3. Front Mass Bias
+        // 3. Front/Rear Weight Bias
         float frontBiasPct = static_cast<float>(c.frontWeightDistribution * 100.0);
-        if (ImGui::SliderFloat("Front Bias", &frontBiasPct, 36.0f, 66.0f, "%.0f%% F")) {
+        if (ImGui::SliderFloat("Weight Balance", &frontBiasPct, 35.0f, 65.0f, "%.0f%% Front")) {
             c.frontWeightDistribution = static_cast<double>(frontBiasPct) / 100.0;
             vehicle.body.syncMassProperties(c);
         }
 
-        // 4. Spring Stiffness
+        // 4. Rocker-Bogie Spring Stiffness
         float springK = static_cast<float>(c.frontSpringStiffness / 1000.0);
-        if (ImGui::SliderFloat("Spring Rate", &springK, 14.0f, 85.0f, "%.1f kN/m")) {
+        if (ImGui::SliderFloat("Suspension Rate", &springK, 5.0f, 40.0f, "%.1f kN/m")) {
             c.frontSpringStiffness = static_cast<double>(springK) * 1000.0;
-            c.rearSpringStiffness = std::round(c.frontSpringStiffness * 0.93);
+            c.rearSpringStiffness = c.frontSpringStiffness;
         }
 
-        // 5. Suspension Damping
+        // 5. Rocker-Bogie Damping
         float dampC = static_cast<float>(c.frontDampingCompression);
-        if (ImGui::SliderFloat("Damping", &dampC, 800.0f, 11000.0f, "%.0f N*s/m")) {
+        if (ImGui::SliderFloat("Compliant Damp", &dampC, 500.0f, 8000.0f, "%.0f N*s/m")) {
             c.frontDampingCompression = static_cast<double>(dampC);
-            c.frontDampingRebound = std::round(c.frontDampingCompression * 1.33);
-            c.rearDampingCompression = std::round(c.frontDampingCompression * 0.94);
-            c.rearDampingRebound = std::round(c.frontDampingCompression * 1.25);
+            c.frontDampingRebound = c.frontDampingCompression * 1.25;
+            c.rearDampingCompression = c.frontDampingCompression;
+            c.rearDampingRebound = c.frontDampingRebound;
         }
 
-        // 6. Anti-Roll Stiffness
-        float arbK = static_cast<float>(c.frontAntiRollStiffness / 1000.0);
-        if (ImGui::SliderFloat("Anti-Roll", &arbK, 0.0f, 45.0f, "%.1f kN/m")) {
-            c.frontAntiRollStiffness = static_cast<double>(arbK) * 1000.0;
-            c.rearAntiRollStiffness = std::round(c.frontAntiRollStiffness * 0.75);
-        }
-
-        // 7. Tire Friction
+        // 6. Cleated Rim Regolith Traction Coeff
         float tireMu = static_cast<float>(c.tireFrictionCoeff);
-        if (ImGui::SliderFloat("Tire Grip u0", &tireMu, 0.25f, 1.85f, "%.2f")) {
+        if (ImGui::SliderFloat("Regolith Grip u0", &tireMu, 0.30f, 1.50f, "%.2f")) {
             c.tireFrictionCoeff = static_cast<double>(tireMu);
         }
 
-        // 8. Tire Cornering Stiffness
-        float tireLat = static_cast<float>(c.tireLateralStiffness);
-        if (ImGui::SliderFloat("Corner Stiff", &tireLat, 4.0f, 22.0f, "%.1f")) {
-            c.tireLateralStiffness = static_cast<double>(tireLat);
-        }
-
-        // 9. Max Steering Angle
+        // 7. Max 4-Corner Steering Angle
         float steerDeg = static_cast<float>(radToDeg(c.maxSteeringAngle));
-        if (ImGui::SliderFloat("Max Steer", &steerDeg, 15.0f, 45.0f, "%.0f deg")) {
+        if (ImGui::SliderFloat("Max 4-Corner Steer", &steerDeg, 15.0f, 45.0f, "%.0f deg")) {
             c.maxSteeringAngle = degToRad(static_cast<double>(steerDeg));
         }
 
-        // 10. Service Brake Torque
-        float brakeTorque = static_cast<float>(c.maxBrakeTorque);
-        if (ImGui::SliderFloat("Brake Torque", &brakeTorque, 800.0f, 8000.0f, "%.0f N*m")) {
-            c.maxBrakeTorque = static_cast<double>(brakeTorque);
-        }
-
-        // 11. Engine Torque Multiplier
+        // 8. Direct-Drive Hub Motor Drive Torque Multiplier
         float engMult = static_cast<float>(c.engineTorqueMultiplier);
-        if (ImGui::SliderFloat("Engine Mult", &engMult, 0.40f, 2.50f, "%.2fx")) {
+        if (ImGui::SliderFloat("Drive Torque Mult", &engMult, 0.40f, 2.50f, "%.2fx")) {
             c.engineTorqueMultiplier = static_cast<double>(engMult);
         }
 
-        // 12. Aero Drag (Cd)
-        float dragCd = static_cast<float>(c.dragCoefficient);
-        if (ImGui::SliderFloat("Aero Drag Cd", &dragCd, 0.05f, 0.95f, "%.2f")) {
-            c.dragCoefficient = static_cast<double>(dragCd);
+        // 9. Mechanical Holding Brake Torque
+        float brakeTorque = static_cast<float>(c.maxBrakeTorque);
+        if (ImGui::SliderFloat("Holding Brake", &brakeTorque, 500.0f, 6000.0f, "%.0f Nm")) {
+            c.maxBrakeTorque = static_cast<double>(brakeTorque);
+            c.handbrakeTorque = static_cast<double>(brakeTorque) * 1.2;
         }
-    }
     ImGui::End();
 }
 
@@ -1175,7 +1114,8 @@ void ImGuiDashboard::renderRightTelemetryPanel(
             ImGui::TableSetupColumn("w(r/s)", ImGuiTableColumnFlags_WidthFixed, 45.0f);
             ImGui::TableHeadersRow();
 
-            for (int i = 0; i < 4; ++i) {
+            const int numWheels = static_cast<int>(snap.wheels.size());
+            for (int i = 0; i < numWheels; ++i) {
                 const WheelState& w = snap.wheels[static_cast<size_t>(i)];
                 ImGui::TableNextRow();
 
@@ -1221,11 +1161,16 @@ void ImGuiDashboard::renderRightTelemetryPanel(
             ImGui::TextColored(hexToImVec4(0x38bdf8), "DYNAMIC MOTION (%.1f km/h)", snap.speedKmh);
         }
 
-        if (ImGui::TreeNode("Wheel Alignment & Fender Clearance")) {
-            for (int i = 0; i < 4; ++i) {
+        if (ImGui::TreeNode("6-Wheel Kinematic Alignment & Articulation")) {
+            const int nW = static_cast<int>(snap.wheels.size());
+            for (int i = 0; i < nW; ++i) {
                 const auto& w = snap.wheels[static_cast<size_t>(i)];
-                ImGui::Text("%s: Hub Rel Y: %+.3f m | Steer: %+.1f deg | Margin: [FLUSH TUCKED]",
-                            w.id.c_str(), w.wheelCenterWorld.y - snap.chassisPosition.y, radToDeg(w.steeringAngle));
+                ImGui::Text("%s: Rel Y: %+.3f m | Steer: %+5.1f deg | Load: %4.0f N | %s",
+                            w.id.c_str(),
+                            w.wheelCenterWorld.y - snap.chassisPosition.y,
+                            radToDeg(w.steeringAngle),
+                            w.normalLoad,
+                            w.hasObstacleContact ? "OBSTACLE" : (w.inContact ? "GROUND" : "AIRBORNE"));
             }
             ImGui::TreePop();
         }
@@ -1287,21 +1232,21 @@ void ImGuiDashboard::drawOscilloscopeCanvas(float width, float height) {
         drawList->AddText(ImVec2(p0.x + 6.0f, y0 + 3.0f), hexToImU32(0x94a3b8), title);
     };
 
-    drawBand(0, "Speed (km/h) [0..180]", 0.0f, 180.0f, {
-        {hexToImU32(0x38bdf8), [](const TelemetrySample& s) { return s.speedKmh; }}
+    drawBand(0, "Rover Speed (m/s) [0..2.0]", 0.0f, 2.0f, {
+        {hexToImU32(0x38bdf8), [](const TelemetrySample& s) { return s.speedKmh / 3.6f; }}
     });
 
-    drawBand(1, "Accel Long (grn) / Lat (org) [-15..+15 m/s2]", -15.0f, 15.0f, {
+    drawBand(1, "Accel Long (grn) / Lat (org) [-4..+4 m/s2]", -4.0f, 4.0f, {
         {hexToImU32(0x22c55e), [](const TelemetrySample& s) { return s.longAccel; }},
         {hexToImU32(0xf97316), [](const TelemetrySample& s) { return s.latAccel; }}
     });
 
-    drawBand(2, "Pitch (cyn) / Roll (pnk) [-8..+8 deg]", -8.0f, 8.0f, {
+    drawBand(2, "Pitch (cyn) / Roll (pnk) [-30..+30 deg]", -30.0f, 30.0f, {
         {hexToImU32(0x06b6d4), [](const TelemetrySample& s) { return s.pitchDeg; }},
         {hexToImU32(0xec4899), [](const TelemetrySample& s) { return s.rollDeg; }}
     });
 
-    drawBand(3, "Suspension Travel FL/FR/RL/RR [0..230 mm]", 0.0f, 230.0f, {
+    drawBand(3, "Wheel Deflection FL/FR/RL/RR [0..250 mm]", 0.0f, 250.0f, {
         {hexToImU32(0x38bdf8), [](const TelemetrySample& s) { return s.compMM[0]; }},
         {hexToImU32(0xa855f7), [](const TelemetrySample& s) { return s.compMM[1]; }},
         {hexToImU32(0x22c55e), [](const TelemetrySample& s) { return s.compMM[2]; }},
@@ -1312,14 +1257,17 @@ void ImGuiDashboard::drawOscilloscopeCanvas(float width, float height) {
 }
 
 void ImGuiDashboard::renderBottomInstrumentCluster(
+    const VehicleDynamics& vehicle,
     const VehicleTelemetrySnapshot& snap,
     const VehicleControlInputs& inputs,
-    double maxRpm,
+    const PathFollower* pathFollower,
+    const Vec3* selectedDestination,
+    bool hasDestination,
     int windowWidth,
     int windowHeight
 ) {
-    const float clusterW = std::min(880.0f, static_cast<float>(windowWidth - 16));
-    const float clusterH = 136.0f;
+    const float clusterW = std::min(1120.0f, static_cast<float>(windowWidth - 16));
+    const float clusterH = 142.0f;
     ImGui::SetNextWindowPos(
         ImVec2(static_cast<float>(windowWidth) * 0.5f, static_cast<float>(windowHeight) - 8.0f),
         ImGuiCond_Always,
@@ -1334,121 +1282,99 @@ void ImGuiDashboard::renderBottomInstrumentCluster(
         ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoSavedSettings;
 
-    if (ImGui::Begin("##InstrumentCluster", nullptr, flags)) {
-        if (ImGui::BeginTable("ClusterGrid", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchSame)) {
+    if (ImGui::Begin("##PlanetaryRoverConsole", nullptr, flags)) {
+        if (ImGui::BeginTable("RoverConsoleGrid", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchSame)) {
             ImGui::TableNextRow();
 
-            // Column 0: Speed & Gear Block
+            // ==================== COLUMN 0: ROVER POSITION & NAVIGATION ====================
             ImGui::TableSetColumnIndex(0);
-            ImGui::SetWindowFontScale(2.1f);
-            ImGui::TextColored(hexToImVec4(0x38bdf8), "%3.0f", std::round(snap.speedKmh));
-            ImGui::SetWindowFontScale(1.0f);
-            ImGui::SameLine();
-            ImGui::BeginGroup();
-            ImGui::TextUnformatted("km/h");
-            ImGui::TextDisabled("%.1f m/s", snap.forwardSpeedMps);
-            ImGui::EndGroup();
+            ImGui::TextColored(hexToImVec4(0x38bdf8), "PLANETARY NAVIGATION & POSITION");
 
-            ImGui::SameLine(145.0f);
-            ImGui::BeginGroup();
-            const std::string modeStr = (snap.drivetrain.transmissionMode == TransmissionMode::Automatic) ? "AUTO" : "MAN";
-            const std::string gearBtn = "GEAR: " + snap.drivetrain.gearLabel + " [" + modeStr + "]";
-            if (ImGui::Button(gearBtn.c_str(), ImVec2(115.0f, 38.0f))) {
-                if (m_callbacks.onToggleTransmission) m_callbacks.onToggleTransmission();
-            }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Click or press M to toggle Auto/Manual (E/Q to shift)");
-            }
-            ImGui::EndGroup();
+            const double roverYaw = getVehicleEulerAngles(snap.chassisRotation).yaw;
+            double headingDeg = radToDeg(roverYaw);
+            while (headingDeg < 0.0) headingDeg += 360.0;
+            while (headingDeg >= 360.0) headingDeg -= 360.0;
 
-            // Active surface badge & handbrake pill
-            bool anyContact = false;
-            SurfaceProperties activeSurf = snap.wheels[0].surface;
-            for (const auto& w : snap.wheels) {
-                if (w.inContact) {
-                    anyContact = true;
-                    activeSurf = w.surface;
-                    break;
-                }
-            }
-            if (anyContact) {
-                ImGui::TextColored(hexToImVec4(0x38bdf8), "Surface: %s (u*%.2f)", activeSurf.label.c_str(), activeSurf.frictionMultiplier);
-            } else {
-                ImGui::TextColored(hexToImVec4(0xef4444), "Surface: AIRBORNE");
-            }
-            if (inputs.handbrake > 0.05) {
-                ImGui::SameLine();
-                ImGui::TextColored(hexToImVec4(0xef4444), "[HANDBRAKE]");
-            }
+            const char* compassPts[] = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
+            const int compassIdx = static_cast<int>(std::floor((headingDeg + 22.5) / 45.0)) % 8;
+            const char* compassStr = compassPts[compassIdx];
 
-            // Column 1: Tachometer, Pedals & Steering
+            ImGui::Text("Coordinates:  X: %+.2f m | Z: %+.2f m", snap.chassisPosition.x, snap.chassisPosition.z);
+            ImGui::Text("Elevation:    Y: %+.2f m (Surface MSL)", snap.chassisPosition.y);
+            ImGui::Text("Heading:      %03.0f deg [%s]", headingDeg, compassStr);
+            ImGui::Text("Velocity:     %.2f m/s (%.1f km/h)", snap.forwardSpeedMps, snap.speedKmh);
+
+            // ==================== COLUMN 1: ATTITUDE & SLOPE SAFETY ====================
             ImGui::TableSetColumnIndex(1);
-            const float rpm = static_cast<float>(snap.drivetrain.rpm);
-            const float rpmFrac = std::clamp(rpm / static_cast<float>(maxRpm), 0.0f, 1.0f);
-            const bool redline = (rpm >= static_cast<float>(maxRpm * 0.90));
-            char rpmBuf[64];
-            std::snprintf(rpmBuf, sizeof(rpmBuf), "%.0f RPM%s", rpm, snap.drivetrain.revLimiterActive ? " [LIM]" : "");
+            ImGui::TextColored(hexToImVec4(0xfacc15), "TERRAIN ATTITUDE & ROCKER-BOGIE");
 
-            if (redline) ImGui::PushStyleColor(ImGuiCol_PlotHistogram, hexToImVec4(0xef4444));
-            ImGui::ProgressBar(rpmFrac, ImVec2(-1.0f, 18.0f), rpmBuf);
-            if (redline) ImGui::PopStyleColor();
+            const double pitchDeg = radToDeg(snap.pitchRad);
+            const double rollDeg = radToDeg(snap.rollRad);
+            const double slopeDeg = std::hypot(pitchDeg, rollDeg);
 
-            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, hexToImVec4(0x22c55e));
-            ImGui::ProgressBar(static_cast<float>(inputs.throttle), ImVec2(125.0f, 13.0f), "THR");
-            ImGui::PopStyleColor();
+            ImGui::Text("Pitch: %+5.1f deg  |  Roll: %+5.1f deg", pitchDeg, rollDeg);
+            ImGui::Text("Terrain Slope: %.1f deg", slopeDeg);
             ImGui::SameLine();
-            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, hexToImVec4(0xef4444));
-            ImGui::ProgressBar(static_cast<float>(inputs.brake), ImVec2(125.0f, 13.0f), "BRK");
-            ImGui::PopStyleColor();
+            if (slopeDeg < 15.0) {
+                ImGui::TextColored(hexToImVec4(0x22c55e), "[NOMINAL]");
+            } else if (slopeDeg < 25.0) {
+                ImGui::TextColored(hexToImVec4(0xfacc15), "[CAUTION]");
+            } else {
+                ImGui::TextColored(hexToImVec4(0xef4444), "[TILT HAZARD]");
+            }
 
-            const double steerDeg = radToDeg(snap.steeringAngleRad);
-            ImGui::Text("STEER: %+5.1f deg", steerDeg);
+            const auto& rb = vehicle.rockerBogie.getState();
+            ImGui::Text("Rocker L/R: %+4.1f / %+4.1f deg | Diff: %+4.1f deg",
+                        radToDeg(rb.leftRockerPitch), radToDeg(rb.rightRockerPitch), radToDeg(rb.differentialAngle));
 
-            // Column 2: 2D G-G Diagram & Attitude Readouts
+            ImGui::Text("6-Wheel Contacts: ");
+            static const char* const wLabels[6] = {"FL", "FR", "ML", "MR", "RL", "RR"};
+            for (size_t w = 0; w < 6; ++w) {
+                ImGui::SameLine();
+                const bool inC = (w < snap.wheels.size()) && snap.wheels[w].inContact;
+                const bool obs = (w < snap.wheels.size()) && snap.wheels[w].hasObstacleContact;
+                const ImVec4 col = obs ? hexToImVec4(0xf97316) : (inC ? hexToImVec4(0x22c55e) : hexToImVec4(0x64748b));
+                ImGui::TextColored(col, "[%s]", wLabels[w]);
+            }
+
+            // ==================== COLUMN 2: AUTONOMOUS MISSION & HUB MOTORS ====================
             ImGui::TableSetColumnIndex(2);
-            ImDrawList* dl = ImGui::GetWindowDrawList();
-            const ImVec2 ggOrigin = ImGui::GetCursorScreenPos();
-            const float ggRadius = 32.0f;
-            const ImVec2 ggCenter(ggOrigin.x + ggRadius + 4.0f, ggOrigin.y + ggRadius + 4.0f);
+            ImGui::TextColored(hexToImVec4(0x34d399), "AUTONOMOUS MISSION & HUB MOTORS");
 
-            dl->AddCircleFilled(ggCenter, ggRadius, hexToImU32(0x0b1120));
-            dl->AddCircle(ggCenter, ggRadius, hexToImU32(0x475569), 24, 1.5f);
-            dl->AddLine(ImVec2(ggCenter.x - ggRadius, ggCenter.y), ImVec2(ggCenter.x + ggRadius, ggCenter.y), hexToImU32(0x334155));
-            dl->AddLine(ImVec2(ggCenter.x, ggCenter.y - ggRadius), ImVec2(ggCenter.x, ggCenter.y + ggRadius), hexToImU32(0x334155));
+            if (pathFollower && hasDestination && selectedDestination) {
+                const auto& telem = pathFollower->getTelemetry();
+                const char* stateStr = "IDLE";
+                ImVec4 stateCol = hexToImVec4(0x94a3b8);
+                switch (telem.state) {
+                    case NavState::Navigating: stateStr = "NAVIGATING TO TARGET"; stateCol = hexToImVec4(0x22c55e); break;
+                    case NavState::Arrived:    stateStr = "ARRIVED AT TARGET"; stateCol = hexToImVec4(0x38bdf8); break;
+                    case NavState::Paused:     stateStr = "MISSION PAUSED"; stateCol = hexToImVec4(0xfacc15); break;
+                    case NavState::Stuck:      stateStr = "ROVER STUCK (OBSTACLE)"; stateCol = hexToImVec4(0xf97316); break;
+                    case NavState::EmergencyStopped: stateStr = "EMERGENCY STOP"; stateCol = hexToImVec4(0xef4444); break;
+                    default: break;
+                }
+                ImGui::TextColored(stateCol, "Status: %s", stateStr);
+                ImGui::Text("Target: (%.1f, %.1f) | Dist: %.1f m", selectedDestination->x, selectedDestination->z, telem.distanceToTargetM);
 
-            const float gx = std::clamp(static_cast<float>(-snap.lateralG / 1.5), -1.0f, 1.0f) * (ggRadius - 5.0f);
-            const float gy = std::clamp(static_cast<float>(-snap.longitudinalG / 1.5), -1.0f, 1.0f) * (ggRadius - 5.0f);
-            dl->AddCircleFilled(ImVec2(ggCenter.x + gx, ggCenter.y + gy), 4.5f, hexToImU32(0x38bdf8));
+                if (telem.totalWaypoints > 0) {
+                    const float prog = static_cast<float>(telem.currentWaypointIndex) / static_cast<float>(telem.totalWaypoints);
+                    char progBuf[64];
+                    std::snprintf(progBuf, sizeof(progBuf), "WP %zu / %zu (%.0f%%)", telem.currentWaypointIndex + 1, telem.totalWaypoints, prog * 100.0f);
+                    ImGui::ProgressBar(prog, ImVec2(-1.0f, 15.0f), progBuf);
+                }
+            } else {
+                ImGui::TextDisabled("Status: MANUAL / IDLE (Click map to set goal)");
+                ImGui::Text("Direct Drive: 6-Wheel Electric Hub Motors");
+                ImGui::Text("Drive Cmd:    %.0f%% | Steer: %+5.1f deg", inputs.throttle * 100.0, radToDeg(snap.steeringAngleRad));
+            }
 
-            ImGui::Dummy(ImVec2(ggRadius * 2.0f + 10.0f, ggRadius * 2.0f + 8.0f));
-            ImGui::SameLine();
-            ImGui::BeginGroup();
-            ImGui::Text("Long G: %+5.2f G", snap.longitudinalG);
-            ImGui::Text("Lat G:  %+5.2f G", snap.lateralG);
-            ImGui::Text("Pitch:  %+5.2f deg", radToDeg(snap.pitchRad));
-            ImGui::Text("Roll:   %+5.2f deg", radToDeg(snap.rollRad));
-            ImGui::EndGroup();
+            if (inputs.handbrake > 0.05 || vehicle.config.enableStationaryHold) {
+                ImGui::TextColored(hexToImVec4(0x38bdf8), "HOLDING BRAKE / ZERO-CREEP STICTION: ACTIVE");
+            } else {
+                ImGui::TextDisabled("Holding Brake: OFF");
+            }
 
             ImGui::EndTable();
-        }
-
-        ImGui::Separator();
-        const bool isVehicleStopped = (std::abs(snap.forwardSpeedMps) < 0.15 && std::abs(snap.lateralSpeedMps) < 0.15);
-        ImGui::Text("Stability State: ");
-        ImGui::SameLine();
-        if (isVehicleStopped) {
-            ImGui::TextColored(hexToImVec4(0x22c55e), "STATIONARY (Zero-Creep Stiction Active)");
-        } else {
-            ImGui::TextColored(hexToImVec4(0x38bdf8), "DYNAMIC MOTION (%.1f km/h)", snap.speedKmh);
-        }
-
-        if (ImGui::TreeNode("Wheel Alignment & Fender Clearance")) {
-            for (int i = 0; i < 4; ++i) {
-                const auto& w = snap.wheels[static_cast<size_t>(i)];
-                ImGui::Text("%s: Hub Rel Y: %+.3f m | Steer: %+.1f deg | Margin: [FLUSH TUCKED]",
-                            w.id.c_str(), w.wheelCenterWorld.y - snap.chassisPosition.y, radToDeg(w.steeringAngle));
-            }
-            ImGui::TreePop();
         }
     }
     ImGui::End();
@@ -1545,6 +1471,7 @@ void ImGuiDashboard::renderMinimapAndNavigationWindow(
                 PlanResult planRes = planner.plan(navGrid, roverPos, selectedDestination);
                 if (planRes.success) {
                     pathFollower.setPath(planRes.waypoints);
+                    pathFollower.startNavigation();
                 }
             }
         }
@@ -1687,13 +1614,17 @@ void ImGuiDashboard::renderMinimapAndNavigationWindow(
         }
 
         // Action Buttons
-        if (telem.state != NavState::Navigating) {
-            if (ImGui::Button("Start Autonomous Mission") && hasDestination) {
-                pathFollower.startNavigation();
+        if (telem.state == NavState::Navigating) {
+            if (ImGui::Button("Pause Mission")) {
+                pathFollower.pauseNavigation(true);
+            }
+        } else if (telem.state == NavState::Paused) {
+            if (ImGui::Button("Resume Mission") && hasDestination) {
+                pathFollower.resumeNavigation();
             }
         } else {
-            if (ImGui::Button("Pause Mission")) {
-                pathFollower.pauseNavigation();
+            if (ImGui::Button("Start Autonomous Mission") && hasDestination) {
+                pathFollower.startNavigation();
             }
         }
         ImGui::SameLine();
@@ -1705,6 +1636,7 @@ void ImGuiDashboard::renderMinimapAndNavigationWindow(
             PlanResult res = planner.plan(navGrid, roverPos, selectedDestination);
             if (res.success) {
                 pathFollower.setPath(res.waypoints);
+                pathFollower.startNavigation();
             }
         }
         ImGui::SameLine();
