@@ -165,6 +165,46 @@ inline Quat quatFromAxisAngle(const Vec3& axis, double angleRad) {
     };
 }
 
+/**
+ * Constructs a rotation quaternion from an orthonormal 3-axis basis:
+ * left (+X), up (+Y), forward (+Z).
+ */
+inline Quat quatFromBasis(const Vec3& left, const Vec3& up, const Vec3& forward) {
+    const double r00 = left.x,    r01 = up.x,    r02 = forward.x;
+    const double r10 = left.y,    r11 = up.y,    r12 = forward.y;
+    const double r20 = left.z,    r21 = up.z,    r22 = forward.z;
+
+    const double trace = r00 + r11 + r22;
+    Quat q{0.0, 0.0, 0.0, 1.0};
+
+    if (trace > 0.0) {
+        const double s = 0.5 / std::sqrt(trace + 1.0);
+        q.w = 0.25 / s;
+        q.x = (r21 - r12) * s;
+        q.y = (r02 - r20) * s;
+        q.z = (r10 - r01) * s;
+    } else if (r00 > r11 && r00 > r22) {
+        const double s = 2.0 * std::sqrt(1.0 + r00 - r11 - r22);
+        q.w = (r21 - r12) / s;
+        q.x = 0.25 * s;
+        q.y = (r01 + r10) / s;
+        q.z = (r02 + r20) / s;
+    } else if (r11 > r22) {
+        const double s = 2.0 * std::sqrt(1.0 + r11 - r00 - r22);
+        q.w = (r02 - r20) / s;
+        q.x = (r01 + r10) / s;
+        q.y = 0.25 * s;
+        q.z = (r12 + r21) / s;
+    } else {
+        const double s = 2.0 * std::sqrt(1.0 + r22 - r00 - r11);
+        q.w = (r10 - r01) / s;
+        q.x = (r02 + r20) / s;
+        q.y = (r12 + r21) / s;
+        q.z = 0.25 * s;
+    }
+    return quatNormalize(q);
+}
+
 inline Quat quatSlerp(const Quat& a, const Quat& b, double t) {
     double bx = b.x, by = b.y, bz = b.z, bw = b.w;
     double cosHalfTheta = a.x * bx + a.y * by + a.z * bz + a.w * bw;

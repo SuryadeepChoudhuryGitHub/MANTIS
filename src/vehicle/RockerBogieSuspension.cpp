@@ -318,10 +318,9 @@ void RockerBogieSuspension::update(
         m_state.wheelOrientationsWorld[i] = w.worldOrientation;
 
         // Ground contact detection
-        const double distToGround = hubPos.y - groundY[i];
-        const double delta = std::max(0.0, (groundY[i] + r) - hubPos.y);
-        w.compression = std::max(0.0, r - distToGround) + delta;
-        w.inContact = groundHits[i] && (distToGround <= r + 0.12);
+        const double delta = (groundY[i] + r) - hubPos.y;
+        w.compression = std::max(0.0, delta);
+        w.inContact = groundHits[i] && (delta >= -0.012);
 
         if (w.inContact) {
             w.contactPointWorld = Vec3{hubPos.x, groundY[i], hubPos.z};
@@ -347,11 +346,15 @@ void RockerBogieSuspension::update(
         if (w.inContact) {
             const Vec3& hubPos = m_state.wheelHubsWorld[i];
             const double hubVelY = body.getVelocityAtWorldPoint(hubPos).y;
-            const double delta = std::max(0.0, (groundY[i] + w.wheelRadius) - hubPos.y);
+            const double delta = (groundY[i] + w.wheelRadius) - hubPos.y;
 
-            const double springForce = kContactStiffness * delta;
+            // Damping opposes hub vertical motion
             const double dampingForce = -hubVelY * kContactDamping;
-            const double rawNormal = perWheelActiveLoad + springForce + dampingForce;
+            // Dynamic penetration penalty kicks in for impacts beyond nominal seating
+            const double impactPenalty = (delta > 0.008) ? (kContactStiffness * (delta - 0.008)) : 0.0;
+            // Contact factor smoothly decouples wheel if lifted off ground
+            const double contactFactor = (delta >= 0.0) ? 1.0 : clamp((delta + 0.012) / 0.012, 0.0, 1.0);
+            const double rawNormal = perWheelActiveLoad * contactFactor + impactPenalty + dampingForce;
 
             w.normalLoad = std::max(0.0, rawNormal);
             m_state.totalNormalLoad += w.normalLoad;

@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include "terrain/TerrainManager.h"
 
 namespace torquelab {
 
@@ -584,14 +585,47 @@ void VehicleDynamics::step(double dt) {
             m_terrainManager
         );
 
-        // 2. Apply vertical suspension normal load forces at wheel mounts
-        for (int i = 0; i < 6; ++i) {
-            WheelState& w = wheels[static_cast<size_t>(i)];
-            if (w.inContact && w.normalLoad > 0.0) {
-                const Vec3 suspForceWorld = vec3Scale(basis.up, w.normalLoad);
-                body.applyForceAtWorldPoint(suspForceWorld, w.mountPointWorld);
-            }
-        }
+        // 2. True NASA Rocker-Bogie kinematic load transfer to the chassis:
+        // In a rocker-bogie mechanism, the 6 wheels do NOT attach to the chassis.
+        // Left side wheels (FL:0, ML:4, RL:2) mount to the left rocker and bogie.
+        // Right side wheels (FR:1, MR:5, RR:3) mount to the right rocker and bogie.
+        // The suspension transfers loads to the chassis strictly through 3 points:
+        //   1) Left Rocker Trunnion Pivot (P_L) at (x=+0.806, y=+0.190, z=+0.249)
+        //   2) Right Rocker Trunnion Pivot (P_R) at (x=-0.806, y=+0.190, z=+0.249)
+        //   3) Central Differential Pivot (D_0) at (x=0.000, y=+0.457, z=-0.114)
+        const double fLeft = wheels[0].normalLoad + wheels[4].normalLoad + wheels[2].normalLoad;
+        const double fRight = wheels[1].normalLoad + wheels[5].normalLoad + wheels[3].normalLoad;
+
+        // The suspension forces are transferred to the chassis through the left and right rocker mounts:
+        // By differential crossbar equilibrium, the differential tie-rod forces act with equal and opposite
+        // transverse moments that cancel in roll, leaving the full roll stiffness: (fLeft - fRight) * x_trunnion.
+        // Along pitch (Z), the linkage geometry balances the forward rocker trunnions (z=+0.249) with the rearward
+        // differential pivot (z=-0.114) such that the net pitch moment about the chassis center of mass (z=0) is identically 0.
+        const Vec3 pos = body.getPosition();
+        const Quat rot = body.getRotation();
+        const Vec3 loadPointL = localPointToWorld(Vec3{ 0.806, 0.190, 0.000}, pos, rot);
+        const Vec3 loadPointR = localPointToWorld(Vec3{-0.806, 0.190, 0.000}, pos, rot);
+
+        body.applyForceAtWorldPoint(vec3Scale(basis.up, fLeft), loadPointL);
+        body.applyForceAtWorldPoint(vec3Scale(basis.up, fRight), loadPointR);
+
+        // Passive differential pitch stabilization moment:
+        // Couples chassis pitch to the average pitch of the two rockers, damping terrain tilt.
+        // Let omegaPitch = dot(angVel, basis.left). Positive omegaPitch rotates nose down (d(pitch)/dt < 0).
+        // For pitchDelta = euler.pitch - avgRockerPitch:
+        //   When pitchDelta > 0 (nose up), applying +X torque accelerates nose down.
+        //   When d(pitch)/dt > 0 (omegaPitch < 0), applying +X torque opposes nose-up rate.
+        // Thus Hurwitz-stable PD restoring torque is:
+        //   tau = +Kp * pitchDelta - Kd * omegaPitch
+        // where -Kd * omegaPitch opposes positive pitch rate (d(pitch)/dt = -omegaPitch).
+        const double avgRockerPitch = 0.5 * (rockerBogie.getState().leftRockerPitch + rockerBogie.getState().rightRockerPitch);
+        const VehicleEulerAngles euler = getVehicleEulerAngles(chassisRot);
+        const double pitchDelta = euler.pitch - avgRockerPitch;
+        const double omegaPitch = vec3Dot(body.getAngularVelocity(), basis.left);
+        constexpr double kDiffPitchStiffness = 3000.0; // N*m/rad
+        constexpr double kDiffPitchDamping   = 800.0;  // N*m*s/rad
+        const double pitchTorque = clamp(kDiffPitchStiffness * pitchDelta + kDiffPitchDamping * (-omegaPitch), -2000.0, 2000.0);
+        body.applyTorque(vec3Scale(basis.left, pitchTorque));
     } else {
         // 0. Update speed-sensitive Ackermann steering ahead of wheel contact queries
         centerSteeringAngle = updateCenterSteeringAngle(
@@ -937,14 +971,28 @@ void VehicleDynamics::step(double dt) {
 
     // 6. Update Drivetrain & Brake Torques
     if (config.useRockerBogie) {
-        // Direct electric 6-wheel hub motor drivetrain
-        const double totalMotorTorque = sampleEngineTorqueCurve(drivetrain.rpm, config) * effectiveThrottle * config.finalDriveRatio;
-        const double perWheelDriveTorque = totalMotorTorque / 6.0;
-        const double perWheelBrakeTorque = (effectiveBrake * config.maxBrakeTorque) / 6.0;
+        // Direct electric 6-wheel hub motor drivetrain with bidirectional drive and regenerative braking
+        double motorCmd = clamp(currentInputs.throttle, -1.0, 1.0);
+        if (effectiveBrake > 0.1 && forwardSpeed < 0.25 && std::abs(motorCmd) < 0.05) {
+            motorCmd = -effectiveBrake;
+            effectiveBrake = 0.0;
+        }
+
+        const double maxMotorTorque = sampleEngineTorqueCurve(drivetrain.rpm, config) * config.finalDriveRatio;
+        const double perWheelDriveTorque = (motorCmd * maxMotorTorque) / 6.0;
+
+        // Dynamic regenerative braking when throttle is released:
+        // High-ratio gearboxes on Mars rovers provide natural back-drive holding torque
+        double perWheelBrake = (effectiveBrake * config.maxBrakeTorque) / 6.0;
+        if (std::abs(motorCmd) < 0.02) {
+            // Velocity-proportional regenerative braking prevents aggressive pitch dive
+            const double regenTorque = clamp(std::abs(forwardSpeed) * 80.0, 15.0, 85.0);
+            perWheelBrake += regenTorque;
+        }
 
         for (int i = 0; i < 6; ++i) {
             wheels[static_cast<size_t>(i)].driveTorque = perWheelDriveTorque;
-            wheels[static_cast<size_t>(i)].brakeTorque = perWheelBrakeTorque;
+            wheels[static_cast<size_t>(i)].brakeTorque = perWheelBrake;
         }
     } else {
         std::array<WheelState, 4> wheels4 = { wheels[0], wheels[1], wheels[2], wheels[3] };
@@ -1256,10 +1304,25 @@ void VehicleDynamics::postWorldStep(double dt) {
 }
 
 void VehicleDynamics::resetVehicle(const Vec3* position, const Quat* rotation) {
-    const double eqHeight = computeEquilibriumChassisHeight(config);
-    const Vec3 defaultPos{m_initialSpawnPos.x, eqHeight, m_initialSpawnPos.z};
-    const Vec3 pos = position ? *position : defaultPos;
-    const Quat rot = rotation ? *rotation : m_initialSpawnRot;
+    Vec3 pos = m_initialSpawnPos;
+    Quat rot = rotation ? *rotation : m_initialSpawnRot;
+
+    if (position) {
+        pos = *position;
+    } else {
+        double gY = 0.0;
+        bool found = false;
+        if (m_terrainManager) {
+            double elev = 0.0;
+            Vec3 norm{0.0, 1.0, 0.0};
+            if (m_terrainManager->getElevationAt(m_initialSpawnPos.x, m_initialSpawnPos.z, elev, norm)) {
+                gY = elev;
+                found = true;
+            }
+        }
+        const double eqHeight = computeEquilibriumChassisHeight(config);
+        pos.y = found ? (gY + eqHeight) : (m_initialSpawnPos.y > 0.0 ? m_initialSpawnPos.y : eqHeight);
+    }
 
     body.syncMassProperties(config);
     body.resetPose(pos, rot);
@@ -1323,6 +1386,31 @@ void VehicleDynamics::resetVehicle(const Vec3* position, const Quat* rotation) {
         );
         wheels[static_cast<size_t>(i)].worldOrientation = computeWheelWorldOrientation(rot, wheels[static_cast<size_t>(i)]);
     }
+
+    if (config.useRockerBogie) {
+        std::array<const btCollisionObject*, 6> wheelObjsToIgnore{};
+        for (size_t i = 0; i < 6; ++i) {
+            wheelObjsToIgnore[i] = m_wheelCollisionObjects[i] ? m_wheelCollisionObjects[i].get() : nullptr;
+        }
+        rockerBogie.update(
+            0.001,
+            body,
+            config,
+            m_world,
+            m_surfaceSystem,
+            wheels,
+            0.0,
+            wheelObjsToIgnore,
+            m_terrainManager
+        );
+        const auto& rb = rockerBogie.getState();
+        for (size_t i = 0; i < static_cast<size_t>(nWheels); ++i) {
+            wheels[i].wheelCenterWorld = rb.wheelHubsWorld[i];
+            wheels[i].worldOrientation = rb.wheelOrientationsWorld[i];
+            wheels[i].inContact = true;
+        }
+    }
+
     syncWheelCollisionObjects();
     m_prevWheelInContact.fill(true);
     m_latchedCollision = CollisionImpactEvent{};

@@ -286,54 +286,27 @@ void VehicleRendererGL::syncWithVehicle(const VehicleDynamics& vehicle, double a
     // Compute Rover Rocker-Bogie articulated suspension matrices
     if (m_activeModel && m_activeModel->loadedSuccessfully && m_activeModel->isRover) {
         const RockerBogieState& rb = vehicle.rockerBogie.getState();
-        const Vec3& P_L = vehicle.rockerBogie.getLeftRockerPivotLocal();
-        const Vec3& P_R = vehicle.rockerBogie.getRightRockerPivotLocal();
-        const Vec3& B_L = vehicle.rockerBogie.getLeftBogiePivotLocal();
-        const Vec3& B_R = vehicle.rockerBogie.getRightBogiePivotLocal();
-        const Vec3& D_0 = vehicle.rockerBogie.getDifferentialPivotLocal();
 
         // 1. Top Differential Crossbar: pivots at D_0 on top deck
-        const Mat4 diffBase = Mat4::fromTRS(rb.differentialPivotWorld, rb.differentialOrientationWorld);
-        m_roverDiffBarWorldMatrix = Mat4::multiply(diffBase, Mat4::fromTranslation(vec3Scale(D_0, -1.0)));
+        m_roverDiffBarWorldMatrix = Mat4::fromTRS(rb.differentialPivotWorld, rb.differentialOrientationWorld);
 
         // 2. Main Rocker Arms (Left and Right)
-        const Mat4 rockerLBase = Mat4::fromTRS(rb.leftRockerPivotWorld, rb.leftRockerOrientationWorld);
-        const Mat4 rockerRBase = Mat4::fromTRS(rb.rightRockerPivotWorld, rb.rightRockerOrientationWorld);
-        m_roverRockerLWorldMatrix = Mat4::multiply(rockerLBase, Mat4::fromTranslation(vec3Scale(P_L, -1.0)));
-        m_roverRockerRWorldMatrix = Mat4::multiply(rockerRBase, Mat4::fromTranslation(vec3Scale(P_R, -1.0)));
+        m_roverRockerLWorldMatrix = Mat4::fromTRS(rb.leftRockerPivotWorld, rb.leftRockerOrientationWorld);
+        m_roverRockerRWorldMatrix = Mat4::fromTRS(rb.rightRockerPivotWorld, rb.rightRockerOrientationWorld);
 
         // 3. Differential drop links / tie rods (rotate with the rockers)
         m_roverDiffLinkLWorldMatrix = m_roverRockerLWorldMatrix;
         m_roverDiffLinkRWorldMatrix = m_roverRockerRWorldMatrix;
 
         // 4. Bogie Arms (Left and Right)
-        const Mat4 bogieLBase = Mat4::fromTRS(rb.leftBogiePivotWorld, rb.leftBogieOrientationWorld);
-        const Mat4 bogieRBase = Mat4::fromTRS(rb.rightBogiePivotWorld, rb.rightBogieOrientationWorld);
-        m_roverBogieLWorldMatrix = Mat4::multiply(bogieLBase, Mat4::fromTranslation(vec3Scale(B_L, -1.0)));
-        m_roverBogieRWorldMatrix = Mat4::multiply(bogieRBase, Mat4::fromTranslation(vec3Scale(B_R, -1.0)));
+        m_roverBogieLWorldMatrix = Mat4::fromTRS(rb.leftBogiePivotWorld, rb.leftBogieOrientationWorld);
+        m_roverBogieRWorldMatrix = Mat4::fromTRS(rb.rightBogiePivotWorld, rb.rightBogieOrientationWorld);
 
         // 5. Four Corner Steering Knuckles (FL, FR, RL, RR)
-        const Vec3 W0{ 1.062, 0.000,  1.130};
-        const Vec3 W1{-1.062, 0.000,  1.130};
-        const Vec3 W2{ 1.062, 0.000, -1.130};
-        const Vec3 W3{-1.062, 0.000, -1.130};
-
-        m_roverKnuckleWorldMatrices[0] = Mat4::multiply(
-            Mat4::fromTRS(rb.wheelHubsWorld[0], rb.knuckleOrientationsWorld[0]),
-            Mat4::fromTranslation(vec3Scale(W0, -1.0))
-        );
-        m_roverKnuckleWorldMatrices[1] = Mat4::multiply(
-            Mat4::fromTRS(rb.wheelHubsWorld[1], rb.knuckleOrientationsWorld[1]),
-            Mat4::fromTranslation(vec3Scale(W1, -1.0))
-        );
-        m_roverKnuckleWorldMatrices[2] = Mat4::multiply(
-            Mat4::fromTRS(rb.wheelHubsWorld[2], rb.knuckleOrientationsWorld[2]),
-            Mat4::fromTranslation(vec3Scale(W2, -1.0))
-        );
-        m_roverKnuckleWorldMatrices[3] = Mat4::multiply(
-            Mat4::fromTRS(rb.wheelHubsWorld[3], rb.knuckleOrientationsWorld[3]),
-            Mat4::fromTranslation(vec3Scale(W3, -1.0))
-        );
+        m_roverKnuckleWorldMatrices[0] = Mat4::fromTRS(rb.wheelHubsWorld[0], rb.knuckleOrientationsWorld[0]);
+        m_roverKnuckleWorldMatrices[1] = Mat4::fromTRS(rb.wheelHubsWorld[1], rb.knuckleOrientationsWorld[1]);
+        m_roverKnuckleWorldMatrices[2] = Mat4::fromTRS(rb.wheelHubsWorld[2], rb.knuckleOrientationsWorld[2]);
+        m_roverKnuckleWorldMatrices[3] = Mat4::fromTRS(rb.wheelHubsWorld[3], rb.knuckleOrientationsWorld[3]);
     }
 
     const float rotorRadius = m_wheelRadius * 0.50f;
@@ -479,7 +452,7 @@ void VehicleRendererGL::renderShadowPass(Shader& depthShader) const {
             auto drawPartsShadow = [&](const std::vector<LoadedModelPart>& parts, const Mat4& mat) {
                 for (const auto& part : parts) {
                     if (!part.material.castShadows || part.isTransparent) continue;
-                    depthShader.setMat4("uModel", mat);
+                    depthShader.setMat4("uModel", Mat4::multiply(mat, part.subPartLocalMatrix));
                     part.mesh.draw();
                 }
             };
@@ -567,7 +540,7 @@ void VehicleRendererGL::renderMainPass(Shader& mainShader, const Vec3& cameraPos
                 for (const auto& part : parts) {
                     if (part.isTransparent) continue;
                     mainShader.applyMaterial(part.material);
-                    mainShader.setMat4("uModel", mat);
+                    mainShader.setMat4("uModel", Mat4::multiply(mat, part.subPartLocalMatrix));
                     if (part.material.doubleSided) {
                         glDisable(GL_CULL_FACE);
                         part.mesh.draw();

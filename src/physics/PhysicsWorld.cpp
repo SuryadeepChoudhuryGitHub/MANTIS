@@ -115,12 +115,13 @@ PhysicsWorld::~PhysicsWorld() {
 }
 
 void PhysicsWorld::buildBaseGroundPlane() {
+    // 160m x 160m Flat Test Pad (80m half-extent avoids Bullet single-precision GJK simplex epsilon degradation)
     addTrackBox(TrackBoxElement{
         "base_ground",
         "Flat Test Pad",
         TrackElementKind::Ground,
         Vec3{0.0, -0.5, 0.0},
-        Vec3{500.0, 0.5, 500.0},
+        Vec3{80.0, 0.5, 80.0},
         quatIdentity(),
         SurfaceType::DryAsphalt,
         false,
@@ -507,35 +508,153 @@ double PhysicsWorld::updateFrame(double frameDeltaSeconds) {
     return accumulator / fixedDt;
 }
 
+PhysicsWorld::TerrainAwarePose PhysicsWorld::computeTerrainAwareSpawnPose(
+    const Vec3& targetHorizontalPos,
+    double yawDeg,
+    const VehicleConfig& config
+) const {
+    TerrainAwarePose pose{};
+    const double yawRad = degToRad(yawDeg);
+    const double cosYaw = std::cos(yawRad);
+    const double sinYaw = std::sin(yawRad);
+
+    struct FootprintPoint {
+        Vec3 localOffset;
+        bool isWheel;
+    };
+    std::vector<FootprintPoint> footprint;
+
+    if (config.useRockerBogie && config.numWheels >= 6) {
+        footprint = {
+            {Vec3{ 1.062, -0.4725,  1.095}, true},  // FL
+            {Vec3{-1.062, -0.4725,  1.095}, true},  // FR
+            {Vec3{ 1.266, -0.4725, -0.055}, true},  // ML
+            {Vec3{-1.266, -0.4725, -0.055}, true},  // MR
+            {Vec3{ 1.062, -0.4725, -1.165}, true},  // RL
+            {Vec3{-1.062, -0.4725, -1.165}, true},  // RR
+            {Vec3{ 0.000, -0.2800,  0.000}, false}, // Belly Center
+            {Vec3{ 0.000, -0.2800,  1.200}, false}, // Belly Front
+            {Vec3{ 0.000, -0.2800, -1.200}, false}, // Belly Rear
+            {Vec3{ 0.700, -0.2800,  0.000}, false}, // Belly Left
+            {Vec3{-0.700, -0.2800,  0.000}, false}  // Belly Right
+        };
+    } else {
+        const double halfW = config.trackWidth * 0.5;
+        const double halfL = config.wheelbase * 0.5;
+        const double wheelBottom = -config.wheelRadius;
+        footprint = {
+            {Vec3{ halfW, wheelBottom,  halfL}, true},
+            {Vec3{-halfW, wheelBottom,  halfL}, true},
+            {Vec3{ halfW, wheelBottom, -halfL}, true},
+            {Vec3{-halfW, wheelBottom, -halfL}, true},
+            {Vec3{ 0.0, -0.20,  0.0}, false},
+            {Vec3{ 0.0, -0.20,  halfL}, false},
+            {Vec3{ 0.0, -0.20, -halfL}, false}
+        };
+    }
+
+    auto queryGround = [&](double wx, double wz, double& outElev, Vec3& outNorm) -> bool {
+        if (m_terrainManager) {
+            double elev = 0.0;
+            Vec3 norm{0.0, 1.0, 0.0};
+            if (m_terrainManager->getElevationAt(wx, wz, elev, norm)) {
+                outElev = elev;
+                outNorm = norm;
+                return true;
+            }
+        }
+        if (m_world) {
+            const double rayStartY = std::max(targetHorizontalPos.y + 200.0, 400.0);
+            const double rayEndY   = std::min(targetHorizontalPos.y - 200.0, -400.0);
+            const auto hit = raycastWorld(Vec3{wx, rayStartY, wz}, Vec3{wx, rayEndY, wz});
+            if (hit.hasHit) {
+                outElev = hit.pointWorld.y;
+                outNorm = hit.normalWorld;
+                return true;
+            }
+        }
+        outElev = targetHorizontalPos.y;
+        outNorm = Vec3{0.0, 1.0, 0.0};
+        return false;
+    };
+
+    std::vector<Vec3> sampledGroundPoints;
+    std::vector<Vec3> sampledNormals;
+    sampledGroundPoints.reserve(footprint.size());
+    sampledNormals.reserve(footprint.size());
+
+    double maxBellyTerrainY = -1e9;
+    Vec3 normalSum{0.0, 0.0, 0.0};
+    int wheelCount = 0;
+
+    for (const auto& fp : footprint) {
+        const double wx = targetHorizontalPos.x + (fp.localOffset.x * cosYaw + fp.localOffset.z * sinYaw);
+        const double wz = targetHorizontalPos.z + (-fp.localOffset.x * sinYaw + fp.localOffset.z * cosYaw);
+
+        double gElev = targetHorizontalPos.y;
+        Vec3 gNorm{0.0, 1.0, 0.0};
+        queryGround(wx, wz, gElev, gNorm);
+
+        sampledGroundPoints.push_back(Vec3{wx, gElev, wz});
+        sampledNormals.push_back(gNorm);
+
+        if (fp.isWheel) {
+            normalSum = vec3Add(normalSum, gNorm);
+            ++wheelCount;
+        } else {
+            maxBellyTerrainY = std::max(maxBellyTerrainY, gElev);
+        }
+    }
+
+    Vec3 terrainNormal{0.0, 1.0, 0.0};
+    if (wheelCount > 0 && vec3LengthSq(normalSum) > 1e-4) {
+        terrainNormal = vec3Normalize(normalSum);
+    }
+
+    const Vec3 forwardNominal{sinYaw, 0.0, cosYaw};
+    Vec3 forwardOnPlane = vec3Sub(forwardNominal, vec3Scale(terrainNormal, vec3Dot(forwardNominal, terrainNormal)));
+    if (vec3LengthSq(forwardOnPlane) < 1e-4) {
+        forwardOnPlane = forwardNominal;
+    } else {
+        forwardOnPlane = vec3Normalize(forwardOnPlane);
+    }
+
+    Vec3 leftOnPlane = vec3Normalize(vec3Cross(terrainNormal, forwardOnPlane));
+    Vec3 upOnPlane = vec3Normalize(vec3Cross(forwardOnPlane, leftOnPlane));
+
+    Quat spawnRot = quatFromBasis(leftOnPlane, upOnPlane, forwardOnPlane);
+
+    double reqCenterYForWheels = -1e9;
+    for (size_t i = 0; i < footprint.size(); ++i) {
+        if (!footprint[i].isWheel) continue;
+        const Vec3 rotOffset = quatRotateVec3(spawnRot, footprint[i].localOffset);
+        const double gY = sampledGroundPoints[i].y;
+        reqCenterYForWheels = std::max(reqCenterYForWheels, gY - rotOffset.y);
+    }
+
+    double reqCenterYForBelly = -1e9;
+    const double bellyClearance = 0.25;
+    for (size_t i = 0; i < footprint.size(); ++i) {
+        if (footprint[i].isWheel) continue;
+        const Vec3 rotOffset = quatRotateVec3(spawnRot, footprint[i].localOffset);
+        const double gY = sampledGroundPoints[i].y;
+        reqCenterYForBelly = std::max(reqCenterYForBelly, gY + bellyClearance - rotOffset.y);
+    }
+
+    const double finalCenterY = std::max(reqCenterYForWheels + 0.015, reqCenterYForBelly);
+
+    pose.position = Vec3{targetHorizontalPos.x, finalCenterY, targetHorizontalPos.z};
+    pose.orientation = spawnRot;
+    pose.groundNormal = terrainNormal;
+    pose.minBellyClearance = finalCenterY - maxBellyTerrainY;
+
+    return pose;
+}
+
 void PhysicsWorld::teleportToPreset(const SpawnPreset& preset) {
-    const double eqHeight = computeEquilibriumChassisHeight(vehicle->config);
-    const Quat rot = quatFromAxisAngle(Vec3{0.0, 1.0, 0.0}, degToRad(preset.yawDeg));
-
-    // Dynamically detect ground surface elevation beneath the spawn coordinates
-    double groundY = preset.position.y;
-    bool foundGround = false;
-    if (m_terrainManager) {
-        double elev = 0.0;
-        Vec3 norm{0.0, 1.0, 0.0};
-        if (m_terrainManager->getElevationAt(preset.position.x, preset.position.z, elev, norm)) {
-            groundY = elev;
-            foundGround = true;
-        }
-    }
-    if (!foundGround) {
-        const double rayStartY = std::max(preset.position.y + 120.0, 200.0);
-        const double rayEndY   = std::min(preset.position.y - 120.0, -200.0);
-        const auto hit = raycastWorld(
-            Vec3{preset.position.x, rayStartY, preset.position.z},
-            Vec3{preset.position.x, rayEndY,   preset.position.z}
-        );
-        if (hit.hasHit) {
-            groundY = hit.pointWorld.y;
-        }
-    }
-
-    const Vec3 spawnPos{preset.position.x, groundY + eqHeight, preset.position.z};
-    vehicle->resetVehicle(&spawnPos, &rot);
+    if (!vehicle) return;
+    const TerrainAwarePose pose = computeTerrainAwareSpawnPose(preset.position, preset.yawDeg, vehicle->config);
+    vehicle->resetVehicle(&pose.position, &pose.orientation);
     accumulator = 0.0;
 }
 

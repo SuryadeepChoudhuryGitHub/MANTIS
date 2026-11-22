@@ -66,6 +66,8 @@ int main() {
     }
     if (!node || !node->mesh) return 1;
 
+    Vec3 nodeTrans{node->translation[0], node->translation[1], node->translation[2]};
+
     std::vector<Triangle> triangles;
     for (size_t p = 0; p < node->mesh->primitives_count; ++p) {
         const auto& prim = node->mesh->primitives[p];
@@ -136,11 +138,15 @@ int main() {
         components.push_back(comp);
     }
 
-    std::sort(components.begin(), components.end(), [](const auto& a, const auto& b) {
-        return a.size() > b.size();
-    });
+    struct PartStats {
+        Vec3 bMin{1e9, 1e9, 1e9};
+        Vec3 bMax{-1e9, -1e9, -1e9};
+        Vec3 sumPos{0, 0, 0};
+        size_t totalTris{0};
+    };
 
-    std::map<PartType, size_t> partTris;
+    std::map<PartType, PartStats> partStats;
+
     for (size_t c = 0; c < components.size(); ++c) {
         const auto& comp = components[c];
         Vec3 bMin{1e9, 1e9, 1e9}, bMax{-1e9, -1e9, -1e9};
@@ -162,29 +168,18 @@ int main() {
         double totalVerts = comp.size() * 3.0;
         Vec3 cPos{sumPos.x / totalVerts, sumPos.y / totalVerts, sumPos.z / totalVerts};
 
-        // Determine part classification
         PartType pt = PartType::Unknown;
         const bool isLeft = (cPos.x >= 0.0);
 
-        // 1. Drop links connecting top differential bar down to rocker arms:
-        // Y spans from ~0.20 to ~0.48, X is around +-0.638, Z is around 0.25
         if (bMin.y < 0.35 && bMax.y > 0.40 && std::abs(cPos.x) >= 0.55 && std::abs(cPos.x) <= 0.70 && cPos.z >= 0.15 && cPos.z <= 0.35) {
             pt = isLeft ? PartType::DiffLink_L : PartType::DiffLink_R;
-        }
-        // 2. Central Differential bar on top of chassis:
-        else if (bMin.y >= 0.40 || (cPos.y >= 0.38 && std::abs(cPos.x) < 0.70)) {
+        } else if (bMin.y >= 0.40 || (cPos.y >= 0.38 && std::abs(cPos.x) < 0.70)) {
             pt = PartType::DiffBar;
-        }
-        // 3. Steering knuckles / Kingpins at the 4 corners:
-        else if (cPos.z > 0.95 && std::abs(cPos.x) > 0.65) {
+        } else if (cPos.z > 0.95 && std::abs(cPos.x) > 0.65) {
             pt = isLeft ? PartType::Knuckle_FL : PartType::Knuckle_FR;
-        }
-        else if (cPos.z < -0.95 && std::abs(cPos.x) > 0.65) {
+        } else if (cPos.z < -0.95 && std::abs(cPos.x) > 0.65) {
             pt = isLeft ? PartType::Knuckle_RL : PartType::Knuckle_RR;
-        }
-        // 4. Bogie arm vs Rocker arm:
-        // Bogie connects mid wheel (Z from -0.50 to 0.05, Y < -0.10, X > 0.85) and rear wheel (Z <= -0.505)
-        else {
+        } else {
             if (cPos.z <= -0.505 || (cPos.z < 0.10 && cPos.y < -0.10 && std::abs(cPos.x) > 0.85)) {
                 pt = isLeft ? PartType::Bogie_L : PartType::Bogie_R;
             } else {
@@ -192,12 +187,34 @@ int main() {
             }
         }
 
-        partTris[pt] += comp.size();
+        auto& s = partStats[pt];
+        s.bMin.x = std::min(s.bMin.x, bMin.x);
+        s.bMin.y = std::min(s.bMin.y, bMin.y);
+        s.bMin.z = std::min(s.bMin.z, bMin.z);
+        s.bMax.x = std::max(s.bMax.x, bMax.x);
+        s.bMax.y = std::max(s.bMax.y, bMax.y);
+        s.bMax.z = std::max(s.bMax.z, bMax.z);
+        s.sumPos.x += sumPos.x;
+        s.sumPos.y += sumPos.y;
+        s.sumPos.z += sumPos.z;
+        s.totalTris += comp.size();
     }
 
-    std::cout << "\n================ SUMMARY OF TRIANGLES BY PART ================\n";
-    for (const auto& kv : partTris) {
-        std::cout << "  " << partTypeName(kv.first) << ": " << kv.second << " triangles\n";
+    std::cout << "\n================ PART STATS IN MODEL COORDINATES ================\n";
+    std::cout << "Node Translation: (" << nodeTrans.x << ", " << nodeTrans.y << ", " << nodeTrans.z << ")\n\n";
+
+    for (const auto& kv : partStats) {
+        const auto& s = kv.second;
+        double totalVerts = s.totalTris * 3.0;
+        Vec3 localCenter{s.sumPos.x / totalVerts, s.sumPos.y / totalVerts, s.sumPos.z / totalVerts};
+        Vec3 modelCenter{localCenter.x + nodeTrans.x, localCenter.y + nodeTrans.y, localCenter.z + nodeTrans.z};
+        Vec3 modelMin{s.bMin.x + nodeTrans.x, s.bMin.y + nodeTrans.y, s.bMin.z + nodeTrans.z};
+        Vec3 modelMax{s.bMax.x + nodeTrans.x, s.bMax.y + nodeTrans.y, s.bMax.z + nodeTrans.z};
+
+        std::cout << partTypeName(kv.first) << " (" << s.totalTris << " tris):\n"
+                  << "  Model BMin:   (" << modelMin.x << ", " << modelMin.y << ", " << modelMin.z << ")\n"
+                  << "  Model BMax:   (" << modelMax.x << ", " << modelMax.y << ", " << modelMax.z << ")\n"
+                  << "  Model Center: (" << modelCenter.x << ", " << modelCenter.y << ", " << modelCenter.z << ")\n\n";
     }
 
     cgltf_free(data);

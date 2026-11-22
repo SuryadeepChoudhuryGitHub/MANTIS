@@ -704,15 +704,48 @@ Our immediate milestone is establishing the functional Mars surface environment:
 - **Strict 1:1 SI Metric Verification:** Verified all dimensional scales across the pipeline: 1 world unit = 1 metre. Perseverance Rover model dimensions ($2.33\text{ m}$ body width / $2.65\text{ m}$ track width, $1.63\text{ m}$ body height / $2.22\text{ m}$ total height, $3.11\text{ m}$ length) and Jezero Crater DTM grid dimensions ($1024\text{ m} \times 1024\text{ m}$) conform precisely to NASA mission specifications.
 - **Smart App Control (SAC) Mitigation:** Removed legacy `TorqueLabNative.exe` copies from CMake post-build rules. The application now compiles strictly to `ProjectARES.exe` and `ProjectARESTests.exe`. Clean execution is achieved directly from PowerShell, Visual Studio (F5 / Ctrl+F5), or terminal without Smart App Control publisher reputation blocks.
 
-### 16.5 Comprehensive Test Benchmarks (49 / 49 Passed)
-- **49 / 49 Test Suites Passing (0 Failed Assertions):**
+### 16.5 Comprehensive Test Benchmarks (51 / 51 Passed)
+- **51 / 51 Test Suites Passing (0 Failed Assertions):**
   - **Unit 35:** 6-Wheel Rocker-Bogie Kinematic Articulation, Ackermann Steering, and Differential Coupling.
   - **Unit 36:** Rover Physical Scale & NASA Jezero Crater DTM Scale Verification.
+  - **Unit 37:** Perseverance Rover Mechanical Articulation, 6-Wheel Rotation & Kinematic Joint Closure.
+  - **Unit 38:** Wheel Collision Geometry, Terrain Elevation Mapping & Anti-Sinkage Verification.
   - **Units 1–34, Validation Tests A–J, Controlled Tests 1–3:** 100% passing.
-- **Headless Smoke Test (`.\build\ProjectARES.exe --smoke-test`):** PASS | Eq Load Err: `0.09%` | Accel Squat Pitch: `-4.50 deg` @ 4 km/h | Brake Dive Pitch: `-7.62 deg`.
+- **Headless Smoke Test (`.\build\ProjectARES.exe --smoke-test`):** PASS | Eq Load Err: `0.00%` | Accel Squat Pitch: `+10.30 deg` @ 4 km/h | Brake Dive Pitch: `+7.06 deg`.
 - **Live OpenGL Timing Diagnostics (`.\build\ProjectARES.exe --diag`):**
-  - **1043.1 FPS** on NVIDIA GeForce RTX 5050 Laptop GPU (`phys=0.11ms, rnd=0.2ms, ui=0.8ms`).
-  - Smooth 6-wheel rover mobility reaching authentic planetary exploration speeds ($3.7\text{ km/h} \approx 1.02\text{ m/s}$).
+  - **~900–1040 FPS** on NVIDIA GeForce RTX 5050 Laptop GPU (`phys=0.06ms, rnd=0.3ms, ui=0.8ms`).
+  - Smooth 6-wheel rover mobility reaching authentic planetary exploration speeds ($3.8\text{ km/h} \approx 1.04\text{ m/s}$).
+
+---
+
+## 18. Phase 6: Mechanical Stability, Multi-Point Reset & Visual Model Fidelity
+
+### 18.1 Forward Pitch/Creep Balance & True Physical Load Transfer
+- **Elimination of Centerline Load Collapse:** Previously, suspension reaction forces were partitioned as 31.4% at the rocker pivots and 68.6% at the centerline differential pivot ($X = 0.0\text{ m}$). Applying 68.6% of vertical load at the centerline eliminated 68.6% of the chassis roll stiffness, causing severe roll drift on Martian slopes.
+- **Authentic Reaction Force Points:** Reaction forces now act at the effective rocker trunnion planes ($X = \pm 0.806\text{ m}$), preserving 100% of the natural roll restoring moment $(f_{\text{Left}} - f_{\text{Right}}) \times 0.806\text{ m}$, while maintaining zero pitch moment about CoM at $Z = 0.0\text{ m}$.
+- **Decoupled Mid-Air Contact:** Tightened contact detection threshold to $1.2\text{ cm}$ below hub seating, preventing airborne wheels from artificially applying full $W/6$ normal load and driving the vehicle while suspended in mid-air.
+
+### 18.2 Terrain-Aware Multi-Point Footprint Reset Engine
+- **Multi-Point Terrain Probing (`computeTerrainAwareSpawnPose` in `PhysicsWorld.cpp`):**
+  - Probes 6 wheel footprints and 5 chassis belly points against the active DTM / elevation map.
+  - Computes the average terrain normal vector $\mathbf{n}_{\text{terrain}}$, constructing a stable orthonormal chassis basis $[\mathbf{u}_{\text{left}}, \mathbf{u}_{\text{up}}, \mathbf{u}_{\text{forward}}]$ aligned to the local surface incline via Shepperd's quaternion algorithm (`quatFromBasis`).
+  - Evaluates minimum clearance across belly points ($> 0.25\text{ m}$) and calculates exact flush wheel seating height, eliminating underground chassis spawns and shock-induced flying wheels upon reset.
+
+### 18.3 Visual Hierarchy Alignment & Sub-Part Matrix Centering
+- **Blender 1:1 Matrix Centering (`VehicleRendererGL.cpp`):**
+  - Removed redundant manual translation offsets ($-D_0, -P_L, -P_R$) which previously shifted geometry 71 cm away from physical joints.
+  - Each suspension part is authored relative to its own joint origin in model space; multiplying $M_{\text{link}} \cdot M_{\text{subPartLocal}}$ directly places every rocker, bogie, strut, and knuckle into perfect mathematical and visual coincidence with the original Blender model hierarchy.
+
+### 18.4 Bullet GJK Simplex Precision in Flat Test Pad
+- **Resolution of Raycast Simplex Epsilon:**
+  - Discovered that a single $1000\text{ m} \times 1000\text{ m} \times 1\text{ m}$ `btBoxShape` (`Vec3{500.0, 0.5, 500.0}`) caused Bullet's GJK subsimplex raycast to exhibit a $6.4\text{ cm}$ bounding-radius stopping error, artificially lifting right-side wheels in test suites.
+  - Resized the baseline flat test pad to a $160\text{ m} \times 160\text{ m}$ box (`Vec3{80.0, 0.5, 80.0}`), reducing the GJK simplex raycast error to $< 0.5\text{ mm}$ and achieving an exact 6-wheel normal load balance with $0.00018\%$ error.
+
+### 18.5 Autonomous Rover Reinforcement Learning (RL) Interface
+- **State & Action Architecture (`RoverRLInterface.h` / `RoverRLInterface.cpp`):**
+  - Defines `RoverObservationState` capturing full 6-DOF chassis linear/angular state, Euler angles, accelerations, rocker/bogie pitch angles and pitch rates, 6-wheel speeds, steering angles, slip ratios, normal loads, traction forces, terrain slope, and belly clearance.
+  - Defines `RoverActuatorCommand` supporting 3 operational control regimes: `DirectTorque` (individual per-wheel torque control), `TargetVelocity` (planetary closed-loop cruise control), and `TeleopNormalized` (standard teleoperation).
+
 
 
 

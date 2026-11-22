@@ -145,6 +145,7 @@ add_library(TorqueLabPhysics STATIC
     src/vehicle/Aerodynamics.cpp
     src/vehicle/VehicleBody.cpp
     src/vehicle/RockerBogieSuspension.cpp
+    src/vehicle/RoverRLInterface.cpp
     src/vehicle/VehicleDynamics.cpp
 )
 

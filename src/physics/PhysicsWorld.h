@@ -145,6 +145,24 @@ public:
      */
     RaycastHit raycastWorld(const Vec3& from, const Vec3& to) const;
 
+    struct TerrainAwarePose {
+        Vec3 position{0.0, 0.0, 0.0};
+        Quat orientation{0.0, 0.0, 0.0, 1.0};
+        Vec3 groundNormal{0.0, 1.0, 0.0};
+        double minBellyClearance{0.35};
+    };
+
+    /**
+     * Computes a stable, terrain-conforming spawn and reset pose.
+     * Evaluates a multi-point footprint (6 wheels + chassis bounds) against terrain elevation.
+     * Guarantees positive belly ground clearance and flush wheel contact without penetrating terrain.
+     */
+    TerrainAwarePose computeTerrainAwareSpawnPose(
+        const Vec3& targetHorizontalPos,
+        double yawDeg,
+        const VehicleConfig& config
+    ) const;
+
     /**
      * Teleports the vehicle to a named Proving Ground zone preset.
      */

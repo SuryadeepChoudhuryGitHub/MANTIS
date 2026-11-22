@@ -1245,26 +1245,48 @@ bool ModelLoaderGLB::loadFromFile(
             outModel.chassisCollisionMesh.appendTransformed(p.cpuGeometry, p.localBindMatrix);
             outModel.steeringWheelParts.push_back(std::move(p));
         } else if (p.role == ModelPartRole::Rover_DiffBar) {
+            const Vec3 pivotModel{0.000, 1.168, -0.149};
+            p.subPartLocalMatrix = Mat4::multiply(Mat4::fromTranslation(vec3Scale(pivotModel, -1.0)), p.localBindMatrix);
             outModel.roverDiffBarParts.push_back(std::move(p));
         } else if (p.role == ModelPartRole::Rover_DiffLink_L) {
+            const Vec3 pivotModel{0.806, 0.901, 0.214};
+            p.subPartLocalMatrix = Mat4::multiply(Mat4::fromTranslation(vec3Scale(pivotModel, -1.0)), p.localBindMatrix);
             outModel.roverDiffLinkPartsLeft.push_back(std::move(p));
         } else if (p.role == ModelPartRole::Rover_DiffLink_R) {
+            const Vec3 pivotModel{-0.806, 0.901, 0.214};
+            p.subPartLocalMatrix = Mat4::multiply(Mat4::fromTranslation(vec3Scale(pivotModel, -1.0)), p.localBindMatrix);
             outModel.roverDiffLinkPartsRight.push_back(std::move(p));
         } else if (p.role == ModelPartRole::Rover_Rocker_L) {
+            const Vec3 pivotModel{0.806, 0.901, 0.214};
+            p.subPartLocalMatrix = Mat4::multiply(Mat4::fromTranslation(vec3Scale(pivotModel, -1.0)), p.localBindMatrix);
             outModel.roverRockerPartsLeft.push_back(std::move(p));
         } else if (p.role == ModelPartRole::Rover_Rocker_R) {
+            const Vec3 pivotModel{-0.806, 0.901, 0.214};
+            p.subPartLocalMatrix = Mat4::multiply(Mat4::fromTranslation(vec3Scale(pivotModel, -1.0)), p.localBindMatrix);
             outModel.roverRockerPartsRight.push_back(std::move(p));
         } else if (p.role == ModelPartRole::Rover_Bogie_L) {
+            const Vec3 pivotModel{0.906, 0.664, -0.540};
+            p.subPartLocalMatrix = Mat4::multiply(Mat4::fromTranslation(vec3Scale(pivotModel, -1.0)), p.localBindMatrix);
             outModel.roverBogiePartsLeft.push_back(std::move(p));
         } else if (p.role == ModelPartRole::Rover_Bogie_R) {
+            const Vec3 pivotModel{-0.906, 0.664, -0.540};
+            p.subPartLocalMatrix = Mat4::multiply(Mat4::fromTranslation(vec3Scale(pivotModel, -1.0)), p.localBindMatrix);
             outModel.roverBogiePartsRight.push_back(std::move(p));
         } else if (p.role == ModelPartRole::Rover_Knuckle_FL) {
+            const Vec3 pivotModel{1.062, 0.264, 1.095};
+            p.subPartLocalMatrix = Mat4::multiply(Mat4::fromTranslation(vec3Scale(pivotModel, -1.0)), p.localBindMatrix);
             outModel.roverKnuckleParts[0].push_back(std::move(p));
         } else if (p.role == ModelPartRole::Rover_Knuckle_FR) {
+            const Vec3 pivotModel{-1.062, 0.264, 1.095};
+            p.subPartLocalMatrix = Mat4::multiply(Mat4::fromTranslation(vec3Scale(pivotModel, -1.0)), p.localBindMatrix);
             outModel.roverKnuckleParts[1].push_back(std::move(p));
         } else if (p.role == ModelPartRole::Rover_Knuckle_RL) {
+            const Vec3 pivotModel{1.062, 0.264, -1.165};
+            p.subPartLocalMatrix = Mat4::multiply(Mat4::fromTranslation(vec3Scale(pivotModel, -1.0)), p.localBindMatrix);
             outModel.roverKnuckleParts[2].push_back(std::move(p));
         } else if (p.role == ModelPartRole::Rover_Knuckle_RR) {
+            const Vec3 pivotModel{-1.062, 0.264, -1.165};
+            p.subPartLocalMatrix = Mat4::multiply(Mat4::fromTranslation(vec3Scale(pivotModel, -1.0)), p.localBindMatrix);
             outModel.roverKnuckleParts[3].push_back(std::move(p));
         } else {
             // Main chassis body, doors, hood, glass, bumpers, lights, interior, mirrors, trim
