@@ -28,17 +28,17 @@ void TrackRendererGL::createProceduralSurfaceMaterials() {
         m_surfaceMaterials[idx] = mat;
     };
 
-    // Daytime PBR Outdoor Road & Terrain Materials
-    setupMat(SurfaceType::DryAsphalt,   0x2e333d, 0x3d4452, 0.06f, 45.0f, 85.0f, 0.74f, 0.08f, false);
-    setupMat(SurfaceType::WetAsphalt,   0x1a2636, 0x25374d, 0.04f,  8.0f, 30.0f, 0.14f, 0.25f, false);
-    setupMat(SurfaceType::Gravel,       0x785a3e, 0x8c6b4a, 0.14f, 10.0f, 35.0f, 0.92f, 0.02f, false);
-    setupMat(SurfaceType::Ice,          0x86d9ff, 0xc7edff, 0.04f,  8.0f, 30.0f, 0.08f, 0.35f, false);
-    setupMat(SurfaceType::Grass,        0x22462b, 0x2b5735, 0.08f, 90.0f, 90.0f, 0.90f, 0.02f, false);
+    // Daytime PBR Outdoor Road & Planetary Surface Materials (Prominent Metric Ground Grid)
+    setupMat(SurfaceType::DryAsphalt,   0x2e333d, 0x14181f, 0.05f,  6.0f,  6.0f, 0.74f, 0.08f, false);
+    setupMat(SurfaceType::WetAsphalt,   0x1a2636, 0x0d141d, 0.04f,  4.0f,  4.0f, 0.14f, 0.25f, false);
+    setupMat(SurfaceType::Gravel,       0x785a3e, 0x25170d, 0.08f,  4.0f,  4.0f, 0.92f, 0.02f, false);
+    setupMat(SurfaceType::Ice,          0x86d9ff, 0x1e3a8a, 0.04f,  4.0f,  4.0f, 0.08f, 0.35f, false);
+    setupMat(SurfaceType::Grass,        0x22462b, 0x0c1a10, 0.06f,  6.0f,  6.0f, 0.90f, 0.02f, false);
     setupMat(SurfaceType::RumbleStrip,  0xdc2626, 0xf8fafc, 0.02f,  1.0f, 25.0f, 0.65f, 0.05f, true);
-    setupMat(SurfaceType::MarsDustFine, 0xd97c4e, 0xb85d38, 0.10f, 60.0f, 60.0f, 0.88f, 0.00f, false);
-    setupMat(SurfaceType::MarsRegolith, 0xb85d38, 0x8c3b20, 0.12f, 50.0f, 50.0f, 0.82f, 0.02f, false);
-    setupMat(SurfaceType::MarsBedrock,  0x734839, 0x5a3427, 0.08f, 30.0f, 30.0f, 0.72f, 0.05f, false);
-    setupMat(SurfaceType::MarsSandDune, 0xe89758, 0xc7783e, 0.15f, 40.0f, 40.0f, 0.90f, 0.00f, false);
+    setupMat(SurfaceType::MarsDustFine, 0xd97c4e, 0x2a0f06, 0.08f,  2.0f,  2.0f, 0.88f, 0.00f, false);
+    setupMat(SurfaceType::MarsRegolith, 0xb85d38, 0x220c05, 0.10f,  2.0f,  2.0f, 0.82f, 0.02f, false);
+    setupMat(SurfaceType::MarsBedrock,  0x734839, 0x1a0904, 0.06f,  2.0f,  2.0f, 0.72f, 0.05f, false);
+    setupMat(SurfaceType::MarsSandDune, 0xe89758, 0x2e1106, 0.12f,  2.0f,  2.0f, 0.90f, 0.00f, false);
 }
 
 void TrackRendererGL::buildTrackMeshes(const std::vector<TrackBoxElement>& elements) {

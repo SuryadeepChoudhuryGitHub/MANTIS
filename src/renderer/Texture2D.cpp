@@ -78,22 +78,16 @@ Texture2D Texture2D::createProceduralGrid(
         pixels[idx + 2] = b;
     };
 
-    if (stripeMode) {
-        for (int y = 0; y < 128; ++y) {
-            for (int x = 0; x < W; ++x) {
-                setPixel(x, y, lnR, lnG, lnB);
-            }
-        }
-    } else {
-        for (int i = 0; i < W; ++i) {
-            for (int t = 0; t < 2; ++t) {
-                setPixel(i, t, lnR, lnG, lnB);
-                setPixel(i, H - 1 - t, lnR, lnG, lnB);
-                setPixel(t, i, lnR, lnG, lnB);
-                setPixel(W - 1 - t, i, lnR, lnG, lnB);
-            }
-        }
+    auto blendPixel = [&](int x, int y, uint8_t r, uint8_t g, uint8_t b, float alpha) {
+        if (x < 0 || x >= W || y < 0 || y >= H) return;
+        const size_t idx = static_cast<size_t>((y * W + x) * 3);
+        pixels[idx + 0] = static_cast<uint8_t>(std::clamp(pixels[idx + 0] * (1.0f - alpha) + r * alpha, 0.0f, 255.0f));
+        pixels[idx + 1] = static_cast<uint8_t>(std::clamp(pixels[idx + 1] * (1.0f - alpha) + g * alpha, 0.0f, 255.0f));
+        pixels[idx + 2] = static_cast<uint8_t>(std::clamp(pixels[idx + 2] * (1.0f - alpha) + b * alpha, 0.0f, 255.0f));
+    };
 
+    // 1. Apply procedural surface noise to the background first (so grid lines remain crisp & prominent)
+    if (!stripeMode && noiseAlpha > 0.001f) {
         for (int i = 0; i < 900; ++i) {
             const int gx = (i * 73) % W;
             const int gy = (i * 137) % H;
@@ -108,6 +102,39 @@ Texture2D Texture2D::createProceduralGrid(
                     pixels[idx + 0] = static_cast<uint8_t>(std::clamp(pixels[idx + 0] * (1.0f - noiseAlpha) + target * noiseAlpha, 0.0f, 255.0f));
                     pixels[idx + 1] = static_cast<uint8_t>(std::clamp(pixels[idx + 1] * (1.0f - noiseAlpha) + target * noiseAlpha, 0.0f, 255.0f));
                     pixels[idx + 2] = static_cast<uint8_t>(std::clamp(pixels[idx + 2] * (1.0f - noiseAlpha) + target * noiseAlpha, 0.0f, 255.0f));
+                }
+            }
+        }
+    }
+
+    if (stripeMode) {
+        for (int y = 0; y < 128; ++y) {
+            for (int x = 0; x < W; ++x) {
+                setPixel(x, y, lnR, lnG, lnB);
+            }
+        }
+    } else {
+        // 2. Draw prominent, bold, anti-aliased grid lines on the outer tile perimeter
+        // Seam width when tiled = 7 + 7 = 14 pixels (solid core with smooth anti-aliased edge)
+        for (int y = 0; y < H; ++y) {
+            const int distY = std::min(y, H - 1 - y);
+            for (int x = 0; x < W; ++x) {
+                const int distX = std::min(x, W - 1 - x);
+                const int d = std::min(distX, distY);
+
+                float lineAlpha = 0.0f;
+                if (d < 5) {
+                    lineAlpha = 1.0f;
+                } else if (d == 5) {
+                    lineAlpha = 0.85f;
+                } else if (d == 6) {
+                    lineAlpha = 0.50f;
+                } else if (d == 7) {
+                    lineAlpha = 0.20f;
+                }
+
+                if (lineAlpha > 0.0f) {
+                    blendPixel(x, y, lnR, lnG, lnB, lineAlpha);
                 }
             }
         }
