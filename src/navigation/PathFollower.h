@@ -1,6 +1,6 @@
 #pragma once
 /**
- * PROJECT ARES — Autonomous Rover Path Following Controller.
+ * PROJECT MANTIS — Autonomous Rover Path Following Controller.
  *
  * Implements a closed-loop Pure Pursuit waypoint-tracking controller that generates
  * authentic actuator commands (steering angle and drive torque / throttle) for the

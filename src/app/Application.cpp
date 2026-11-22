@@ -22,7 +22,7 @@ Application::~Application() {
 bool Application::init(int width, int height, bool visible) {
     s_activeApp = this;
     if (!glfwInit()) {
-        std::cerr << "[ProjectARES] Failed to initialize GLFW." << std::endl;
+        std::cerr << "[MANTIS] Failed to initialize GLFW." << std::endl;
         return false;
     }
 
@@ -35,12 +35,12 @@ bool Application::init(int width, int height, bool visible) {
     m_window = glfwCreateWindow(
         width,
         height,
-        "PROJECT ARES — Autonomous Planetary Rover Exploration Simulator (C++20 / OpenGL 3.3 / Bullet)",
+        "MANTIS — Autonomous Planetary Rover Exploration Simulator (C++20 / OpenGL 3.3 / Bullet)",
         nullptr,
         nullptr
     );
     if (!m_window) {
-        std::cerr << "[ProjectARES] Failed to create GLFW OpenGL 3.3 window." << std::endl;
+        std::cerr << "[MANTIS] Failed to create GLFW OpenGL 3.3 window." << std::endl;
         glfwTerminate();
         return false;
     }
@@ -49,7 +49,7 @@ bool Application::init(int width, int height, bool visible) {
     glfwSwapInterval(0);
 
     if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress))) {
-        std::cerr << "[ProjectARES] Failed to initialize GLAD OpenGL 3.3 loader." << std::endl;
+        std::cerr << "[MANTIS] Failed to initialize GLAD OpenGL 3.3 loader." << std::endl;
         return false;
     }
 
@@ -84,12 +84,12 @@ bool Application::init(int width, int height, bool visible) {
     if (!m_mainShader.loadFromFiles("shaders/phong_shadow.vert", "shaders/phong_shadow.frag") ||
         !m_depthShader.loadFromFiles("shaders/shadow_depth.vert", "shaders/shadow_depth.frag") ||
         !m_lineShader.loadFromFiles("shaders/debug_line.vert", "shaders/debug_line.frag")) {
-        std::cerr << "[ProjectARES] Failed to compile GLSL shaders." << std::endl;
+        std::cerr << "[MANTIS] Failed to compile GLSL shaders." << std::endl;
         return false;
     }
 
     if (!m_shadowFBO.init(2048)) {
-        std::cerr << "[ProjectARES] Warning: ShadowMapFBO incomplete." << std::endl;
+        std::cerr << "[MANTIS] Warning: ShadowMapFBO incomplete." << std::endl;
     }
 
     m_trackRenderer.init(m_physicsWorld->trackElements);

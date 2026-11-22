@@ -1,5 +1,5 @@
 # =============================================================================
-# PROJECT ARES — Canonical Build & Execution Commands (Single 'build/' Directory)
+# MANTIS — Canonical Build & Execution Commands (Single 'build/' Directory)
 # =============================================================================
 
 # --- 1. MinGW-w64 (GCC 16 / UCRT64) Workflow ---
@@ -7,23 +7,25 @@
 cmake --preset windows-mingw
 
 # Build both executable and tests
-cmake --build build --target TorqueLabNative TorqueLabNativeTests -j 6
+cmake --build build --target MANTIS MANTISTests -j 6
 
-# Run 45-suite automated verification tests
-.\build\TorqueLabNativeTests.exe
+# Run 58-suite automated verification tests
+.\build\MANTISTests.exe
+# or via main executable flag:
+.\build\MANTIS.exe --tests
 
 # Run interactive simulation or headless smoke test
-.\build\TorqueLabNative.exe
-.\build\TorqueLabNative.exe --smoke-test
-.\build\TorqueLabNative.exe --diag
+.\build\MANTIS.exe
+.\build\MANTIS.exe --smoke-test
+.\build\MANTIS.exe --diag
 
 # --- 2. Visual Studio 2026 / MSVC Workflow ---
 # Configure in build/
 cmake --preset windows-msvc
 
 # Build Release targets
-cmake --build build --config Release --target TorqueLabNative TorqueLabNativeTests -j 6
+cmake --build build --config Release --target MANTIS MANTISTests -j 6
 
 # Run from build/Release/
-.\build\Release\TorqueLabNativeTests.exe
-.\build\Release\TorqueLabNative.exe
+.\build\Release\MANTISTests.exe
+.\build\Release\MANTIS.exe

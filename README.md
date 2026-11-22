@@ -1,260 +1,262 @@
-# TORQUE LAB NATIVE (Project Torque)
-### Realistic 3D Vehicle Physics Simulator & Engineering Laboratory — Native C++20 / OpenGL 3.3 / Bullet Physics / Dear ImGui
+# MANTIS
+### Mars Autonomous Navigation & Terrain Intelligent Simulator
+**High-Fidelity Planetary Rover Mobility, Rocker-Bogie Kinematics, Autonomous Pathfinding & Real-Time Extraterrestrial Physics Simulation Engine**
 
-**Where physical laws govern every motion.**
-
-**Torque Lab Native** is a high-performance Windows desktop 6-DOF vehicle dynamics simulator and interactive engineering laboratory built with **C++20**, **OpenGL 3.3 Core Profile**, **GLSL 330**, **GLFW 3.4**, **GLAD**, **Bullet Physics (`btDiscreteDynamicsWorld`)**, **Dear ImGui**, and **CMake**.
-
-Every vehicle behavior — acceleration, braking, cornering, pitch (brake dive and acceleration squat), body roll, load transfer, tire wheelspin, brake lockup, understeer/oversteer, surface grip transitions, airborne ballistics, obstacle collisions, and controller force feedback — emerges strictly from coherent physical laws (forces, torques, mass, rotational inertia, suspension spring-dampers, and slip-based friction circles).
+*Built with Native C++20, OpenGL 3.3 Core Profile, Bullet Physics 3, and Dear ImGui.*
 
 ---
 
-## 1. Key Capabilities & Architecture
+## 1. Project Overview & Physical Philosophy
 
-- **6-DOF Rigid-Body Dynamics & Suspension (120 Hz Fixed Timestep):**
-  - Independent 4-wheel suspension with Hooke springs ($F_s = -k \Delta x$), asymmetric bound/rebound dampers ($c_{\text{bound}} \neq c_{\text{rebound}}$), progressive quadratic bump stops, and front/rear anti-roll bars.
-  - Pacejka Magic Formula tire model with load-sensitive friction coefficient $\mu(F_z)$ and combined-slip friction circle saturation ($\sqrt{F_x^2 + F_y^2} \le \mu F_z$).
-  - Piecewise-linear engine torque curve, automatic/manual transmission, launch clutch slip engagement, soft rev limiter at 7,000 RPM, RWD/FWD/AWD drive layout distribution, and speed-sensing viscous Limited-Slip Differential (LSD).
-  - Quadratic aerodynamic drag ($F_d = \frac{1}{2}\rho C_d A v^2$) and aerodynamic downforce ($F_L = \frac{1}{2}\rho C_L A v^2$).
-  - 6 distinct road surfaces: Dry Asphalt ($\mu=1.00$), Wet Asphalt ($\mu=0.68$), Gravel ($\mu=0.54$), Ice ($\mu=0.18$), Grass ($\mu=0.42$), and Rumble Strips ($\mu=0.88$).
+**MANTIS** (*Mars Autonomous Navigation & Terrain Intelligent Simulator*) is an advanced, physics-first planetary rover mobility simulation and autonomous exploration laboratory. Designed specifically for extreme off-road extraterrestrial traversal, MANTIS simulates the complex dynamics of robotic explorers traversing rugged martian and lunar environments with uncompromising physical fidelity.
 
-- **Full glTF 2.0 Metallic-Roughness PBR & HDR Environment Lighting:**
-  - Integrated `cgltf`-based binary glTF 2.0 / GLB loader parsing hierarchical scene graphs, node transformations, wheel rotation pivots, and authentic PBR materials.
-  - Multi-car garage with interactive top-bar and panel dropdown selectors:
-    - **BMW M4 Coupe:** High-poly modern twin-turbo sports coupe (743,509 triangles across 58 chassis nodes + 4 articulated wheel assemblies, $550\text{ N}\cdot\text{m}$, 6-speed RWD).
-    - **1970 Dodge Challenger R/T:** Authentic classic American muscle car (1,915,112 triangles across 162 chassis nodes + 4 independent wheel assemblies, 426 Hemi V8, $664\text{ N}\cdot\text{m}$, 4-speed manual gearbox, Dana 60 Sure-Grip LSD, authentic launch squat).
-    - **Procedural Sports Coupe:** Lightweight procedural baseline coupe with full parameter customizability.
-  - **Cook-Torrance GGX Microfacet BRDF:** Physical metallic-roughness lighting with Trowbridge-Reitz GGX distribution ($D$), Smith-Schlick geometric shadowing ($G$), Fresnel-Schlick reflectivity ($F$), and energy conservation ($k_D + k_S \le 1.0$).
-  - **Complete Multi-Channel Texture Extraction:**
-    - Unit 0: **Base Color / Albedo** (`GL_SRGB8_ALPHA8`, sRGB color space)
-    - Unit 1: **Directional Shadow Map** (`GL_DEPTH_COMPONENT24`, depth)
-    - Unit 2: **HDR Environment Panoramic Map** (`GL_RGBA8`, IBL)
-    - Unit 3: **Tangent-Space Normal Map** (`GL_RGBA8`, Linear space) with `normalScale`
-    - Unit 4: **Metallic-Roughness Map** (`GL_RGBA8`, Linear space; Green = Roughness, Blue = Metalness)
-    - Unit 5: **Ambient Occlusion Map** (`GL_RGBA8`, Linear space; Red = AO) with `occlusionStrength`
-    - Unit 6: **Emissive Map** (`GL_SRGB8_ALPHA8`, sRGB color space)
-  - **MikkTSpace-Compatible Orthonormal Tangents:** Automatic smooth tangent ($\vec{T}$) and bitangent handedness sign ($tw \in \{-1.0, 1.0\}$) generation across indexed triangle meshes for authentic bump details.
-  - **Automotive Studio & Sky HDR Environment Map (IBL):** Procedural panoramic sky dome with sun corona and 3 overhead studio softbox light strips; trilinear roughness mipmaps translate surface roughness directly into physical specular blur.
-  - **ACES Filmic Tone Mapping & Gamma 2.2:** Linear lighting workflow with photographic tone reproduction.
-  - **Real-Time Shading Diagnostic Modes & Material Inspector:** Immediate inspection via Dear ImGui across 9 modes (Final PBR, Albedo, Metalness, Roughness, Shading Normals, AO, Emissive, Tangents, Environment Specular) with interactive live material breakdown tables.
-
-- **Automatic Model-Derived Collision Pipeline & Compile-Time Auto-Baking:**
-  - V-HACD volumetric decomposition and spatial topological clustering via `btConvexHullComputer`.
-  - Automatically derives wheelbase, track width, wheel radius, and ground clearance directly from 3D model geometry.
-  - Generates 10 watertight convex collision hulls (6 chassis pieces + 4 dedicated cylindrical wheel hulls) in Bullet's `btCompoundShape` aligned 1:1 with visual body nodes.
-  - **Automated Compile-Time & Runtime Baking:** Integrated CMake post-build step (`TorqueLabNative --bake-collisions`) automatically bakes collision geometry whenever compiling. Missing or modified models (`.glb` newer than cached `.json`) are instantly detected via file timestamps and baked headlessly on pure CPU without requiring an OpenGL window.
-  - **Dynamic Multi-Vehicle Auto-Discovery:** Dropping any new `.glb` into `model/` automatically discovers it, bakes physical collision hulls, and exposes it in the in-game car selection dropdown and controller cycling (`RB` / `B`).
-  - Fast disk caching (`model/cache/<vehicle_id>_collision.json`) and Continuous Collision Detection (CCD) to prevent high-speed tunneling.
-
-- **Full Controller Support Inspired by Forza Horizon:**
-  - Comprehensive multi-gamepad input subsystem using GLFW and dynamic Windows XInput.
-  - Analog trigger acceleration and braking with automatic reverse integration in Automatic mode.
-  - Continuous analog steering with configurable deadzones, progressive sensitivity curves, and steering inversion.
-  - **Resting Baseline Calibration Guard:** Automatically captures initial idle axis baselines on connection to neutralize virtual HID devices (such as Monect or vJoy) and eliminate phantom brake lockup.
-  - Right-stick free-look look-around chase camera with heading damping.
-  - Timed hold-to-recover vehicle reset action (`Y` / `Triangle`) preventing accidental resets.
-  - Interactive button rebinding interface with automatic Xbox vs. PlayStation button glyph adaptivity.
-  - Persistent JSON configuration in `settings/controller_config.json`.
-
-- **Physics Event-Driven Controller Haptics (Strictly Zero RPM Vibration):**
-  - **Total RPM Vibration Elimination:** Engine RPM, throttle position, engine audio, and smooth cruising produce strictly **0.0% vibration**.
-  - **Collision Impact Feedback:** Severity scaled non-linearly from rigid-body velocity jumps ($|\Delta \vec{v}|$) and Bullet contact normal impulses. Contact lifetime filtering silences settled resting contact against walls.
-  - **Lateral Directionality:** Collision contact points mapped to chassis coordinates weight the left vs. right vibration motors ($[-1.0 .. +1.0]$).
-  - **Suspension Events:** Distinct transient pulses for airborne jump landings ($v_{\text{down}} > 0.6\text{ m/s}$), progressive bump-stop bottoming out ($w.\text{bumpStopForce} > 800\text{ N}$), sharp curb/bump strikes ($dL/dt < -2.2\text{ m/s}$), and underside chassis scrapes.
-  - Independent low-frequency (heavy thuds) and high-frequency (sharp impacts/scrapes) motor routing with smooth cosine decay envelopes and collision deduplication cooldowns.
-
-- **Interactive Engineering Dashboard (Dear ImGui):**
-  - Live tuning sliders for mass, CoM height, spring stiffness, damping, anti-roll bars, tire grip, and brake bias.
-  - Real-time 4-wheel telemetry table and 4-band oscilloscope (G-forces, suspension travel, tire slip, engine RPM).
-  - Digital instrument cluster with speedometer, RPM bar, pedal meters, G-G diagram, and transmission mode selector.
-  - 3D force vector gizmos (normal load $F_z$, traction $F_x$, cornering $F_y$, velocity vector, and CoM marker).
+### Core Physical Axiom (Non-Negotiable)
+**Every rover motion, articulation, wheel contact, and trajectory emerges strictly from coherent physical laws:**
+- **Zero Fake Animations:** No predefined wheel roll cycles, artificial body tilt animations, or visual interpolation hacks.
+- **Zero Speed Multipliers:** Vehicle velocity is strictly the mathematical integration of wheel-ground traction, motor torques, aerodynamic drag, rolling resistance, and slope forces.
+- **Authentic Gravitation & Atmosphere:** Full support for Mars ($g = 3.71\text{ m/s}^2, \rho = 0.020\text{ kg/m}^3$) and Moon ($g = 1.62\text{ m/s}^2, \rho = 0.000\text{ kg/m}^3$).
+- **Strict SI Metric Units & Right-Handed Frame:** All calculations operate in $\text{m}, \text{kg}, \text{s}, \text{N}, \text{N}\cdot\text{m}, \text{rad}, \text{rad/s}$ in a right-handed frame ($+X\text{ Left}, +Y\text{ Up}, +Z\text{ Forward}$).
 
 ---
 
-## 2. How to Build & Run (Windows x64)
+## 2. System Architecture & Key Capabilities
 
-### Quick Run
-The Release binaries and assets are located in [`build/Release/`](build/Release):
-
-```powershell
-# 1. Launch the interactive 3D desktop simulator (1440x900 window)
-.\build\Release\TorqueLabNative.exe
-
-# 2. Run the 28-suite automated unit, validation & physics test harness
-.\build\Release\TorqueLabNativeTests.exe
-
-# 3. Run full-pipeline acceleration telemetry table + 600-frame live OpenGL timing diagnostics
-.\build\Release\TorqueLabNative.exe --diag
-
-# 4. Run headless OpenGL + Bullet smoke test (quick sanity check)
-.\build\Release\TorqueLabNative.exe --smoke-test
+```
+                                  +-------------------------------------------------------+
+                                  |                     MANTIS ENGINE                     |
+                                  +-------------------------------------------------------+
+                                                              |
+                  +-------------------------+-----------------+-------------------------+
+                  |                         |                                           |
+                  v                         v                                           v
+       +--------------------+    +--------------------+                      +--------------------+
+       |  PHYSICS & ROVER   |    |    TERRAIN & MAP   |                      |    AUTONOMOUS NAV  |
+       +--------------------+    +--------------------+                      +--------------------+
+       | - Rocker-Bogie     |    | - HiRISE Jezero DTM|                      | - 2D NavGrid       |
+       | - 6 Hub Motors     |    | - Procedural fBm   |                      | - A* Path Planner  |
+       | - 4-Corner Steer   |    | - Craters & Rocks  |                      | - Path Follower    |
+       | - Terramechanics   |    | - 2.0m Metric Grid |                      | - Topo Minimap HUD |
+       +--------------------+    +--------------------+                      +--------------------+
+                  |                         |                                           |
+                  +-------------------------+-----------------+-------------------------+
+                                                              |
+                                                              v
+                                             +----------------------------------+
+                                             |     RENDERING & USER CONSOLE     |
+                                             +----------------------------------+
+                                             | - OpenGL 3.3 Core PBR Pipeline   |
+                                             | - Cook-Torrance GGX & Shadows    |
+                                             | - 3-Column Exploration Console   |
+                                             | - 58-Suite Automated Test Runner |
+                                             +----------------------------------+
 ```
 
-### Build from Source (Visual Studio 2022 / CMake)
-**Prerequisites:**
-- **CMake** `3.20+`
-- **Visual Studio 2022 or 2026** with **Desktop development with C++** (MSVC x64)
-- **OpenGL 3.3+** capable GPU and display driver
-- *(All third-party libraries — `GLFW 3.4`, `Bullet Physics 3.25`, `Dear ImGui v1.91.5`, `cgltf`, and `V-HACD` — are managed automatically via CMake `FetchContent` or vendored in `third_party/`).*
+### A. Rocker-Bogie Suspension & Mobility Kinematics
+- **Passive Linkage Equilibrium:** Authentic implementation of the flight-proven Mars rocker-bogie mechanism. Larger "rocker" arms on each side pivot from the main chassis and connect to a 2-wheel "bogie" assembly via secondary revolute joints.
+- **Differential Balancing Crossbar:** A top-mounted mechanical differential crossbar couples the left and right rockers across the chassis roof. When one side climbs a rock, the differential forces the opposing side downward, equalizing wheel ground contact and halving chassis pitch and roll.
+- **Obstacle Clearance:** Enables traversing obstacles up to twice the wheel diameter (over 0.5 meters) without chassis high-centering or tipping.
+- **6 Independent Electric Hub Motors:** Direct-drive brushless electric hub motors inside each of the 6 cleated aluminium wheels provide independent drive torque ($N\cdot m$), allowing individual wheel speed synchronization and zero-creep parking stiction.
+- **4-Corner Ackermann Steering:** Independent steering actuators on the 4 corner wheels (Front-Left, Front-Right, Rear-Left, Rear-Right) with Ackermann inner/outer angle compensation and point-turn zero-radius steering capability.
+
+### B. Planetary Terrain & Elevation Mapping System
+- **Mars Jezero Crater Regional DTM:** High-resolution digital terrain model derived from NASA MRO HiRISE stereo photogrammetry (1024×1024 grid, 1.0-meter horizontal spacing, 42.4 m elevation relief). Features central-difference vertex normal reconstruction for seamless lighting.
+- **Procedural Planetary Terrain Generator:** Multi-octave fractal Brownian motion (fBm) Perlin noise with analytical crater depression/ejecta-rim mathematical profiles, coordinate domain warping to break Cartesian grid artifacts, and procedural basalt rock boulders with Bullet convex hull collision bodies.
+- **High-Contrast 2.0-Meter Metric Ground Grid:** Procedural surface shader with anti-aliased dark basalt seams (`0x220c05` on `0xb85d38`) forming a prominent 2.0 m × 2.0 m metric coordinate grid matching the rover's wheelbase (2.26 m) and track width (2.0 m) for instant visual perception of forward velocity.
+
+### C. Autonomous Navigation & Pathfinding Pipeline
+- **2D Traversability Navigation Grid (`NavGrid`):** Real-time spatial grid sampling terrain elevation, slope gradients, rollover thresholds ($>25^\circ$), and obstacle safety margins around the rover footprint.
+- **Optimal A* Path Planner (`AStarPlanner`):** Heuristically admissible $A^*$ search with directional slope penalty costs, rock clearance weighting, and string-pulling line-of-sight path smoothing.
+- **Adaptive Path Follower (`PathFollower`):** Closed-loop pursuit controller with heading-error speed adaptation, incline pitch feed-forward torque, stuck detection/auto-recovery, and seamless manual driving override with a 0.8-second auto-resume hold.
+- **Interactive Topographical Minimap HUD (`MinimapRenderer`):** Dual-layer topographical minimap with color-coded slope safety contours (Green: nominal $<15^\circ$, Yellow: caution $15-25^\circ$, Red: rollover hazard $>25^\circ$), elevation shading, planned waypoint paths, rover heading arrow, and 1-click destination dispatch.
+
+### D. Active Planetary Rover Fleet
+1. **NASA Perseverance Rover (Mars 2020):** Primary active vehicle. High-fidelity 536-node visual glTF 2.0 model with articulated rockers, bogies, 6 cleated aluminium wheels, robotic science arm, SuperCam mast, MMRTG power source, and SHERLOC turret.
+2. **NASA Curiosity Rover (MSL):** 9-part visual mesh (63,516 vertices, 51,305 triangles) with operational rocker-bogie kinematics and science deck.
+3. **NASA Opportunity Rover (MER):** Solar-powered exploration rover (44,117 vertices, 31,450 triangles) with authentic lightweight chassis and panoramic camera mast.
+4. **MANTIS Prototype Rover:** Procedural baseline rover platform for automated regression testing and rapid suspension tuning.
+
+### E. Planetary Exploration Console & Telemetry (Dear ImGui)
+- **Top Bar:** Quick planetary gravity indicator ($g$), map selection combo, camera view buttons, force vector gizmo toggles, and instant physics verifier.
+- **Left Control Panel:** 6-wheel rocker-bogie angle monitor, 6-wheel ground contact interaction table (Normal Load $N$, Drive Torque $N\cdot m$, Traction $N$, Slip Ratio, Contact state), zero-creep stiction toggle, and real-time physical tuning sliders (Mass, CoM offset, spring rates, regolith $\mu$, steering limits).
+- **Right Telemetry Panel:** 4-wheel physics balance summary, component hierarchy tree, and 4-band real-time oscilloscope tracking speed (0–2 m/s), acceleration ($\pm 4\text{ m/s}^2$), attitude pitch/roll ($\pm 30^\circ$), and suspension travel (0–250 mm).
+- **Bottom Rover Exploration Console:**
+  - *Column 0 (Navigation & Position):* World coordinates $(X, Z)$, Elevation $Y$ (MSL), 8-point compass heading, and forward velocity in m/s and km/h.
+  - *Column 1 (Attitude & Slope Safety):* Pitch & Roll degrees, terrain slope hazard badge (`[NOMINAL]`, `[CAUTION]`, `[TILT HAZARD]`), linkage pitch angles (Left Rocker, Right Rocker, Differential Bar), and 6-wheel contact status pills (`[FL] [FR] [ML] [MR] [RL] [RR]`).
+  - *Column 2 (Autonomous Mission & Motors):* Mission status badge (`NAVIGATING`, `ARRIVED`, `PAUSED`, `IDLE`, `STUCK`), destination coordinates, distance remaining, progress bar, 6-wheel hub motor power %, and holding brake state.
+
+---
+
+## 3. Project Dependencies & Prerequisites
+
+MANTIS is designed to build out-of-the-box with minimal external setup. Most libraries are automatically fetched and compiled via CMake `FetchContent` or vendored in `third_party/`.
+
+### System Requirements
+| Component | Minimum Specification | Recommended |
+| :--- | :--- | :--- |
+| **Operating System** | Windows 10 / 11 (64-bit) | Windows 11 (64-bit) |
+| **Compiler** | C++20 compliant compiler (GCC 13+, Clang 16+, MSVC 19.38+) | MinGW-w64 GCC 16 (UCRT64) or Visual Studio 2026 MSVC |
+| **Build System** | CMake 3.20+ | CMake 3.28+ |
+| **GPU & Drivers** | OpenGL 3.3 Core Profile capable GPU | Dedicated NVIDIA GeForce / AMD Radeon GPU with vendor OpenGL drivers |
+
+### Core Software Dependencies
+1. **OpenGL 3.3 Core Profile:** High-performance hardware-accelerated 3D rendering pipeline.
+2. **GLAD:** OpenGL function pointer loader (`third_party/glad/`).
+3. **GLFW 3.4:** Cross-platform window creation, OpenGL context management, and raw keyboard/mouse/gamepad polling (fetched via CMake `FetchContent`).
+4. **Bullet Physics 3.25:** Real-time 3D rigid-body collision detection, contact constraint resolution, and continuous collision detection (CCD) (`btDiscreteDynamicsWorld`, fetched via CMake `FetchContent`).
+5. **Dear ImGui v1.91+:** Immediate-mode graphical user interface for real-time telemetry, console displays, and interactive parameter tuning (`third_party/imgui/`).
+6. **cgltf:** Lightweight, single-header C99 glTF 2.0 and binary GLB parser (`third_party/cgltf/`).
+7. **stb_image:** Public-domain image decompression for PBR textures (`third_party/stb/`).
+8. **V-HACD:** Volumetric Hierarchical Approximate Convex Decomposition for automatic model-derived collision hull generation (`bullet3/Extras/VHACD/`).
+9. **Draco (Optional):** Google Draco 3D geometric compression library for decoded meshes (auto-detected via MSYS2 / system paths).
+
+---
+
+## 4. How to Build & Run
+
+### Quick 1-Click Launchers (Windows)
+- Double-click **`run.bat`** in the project root to launch the interactive simulation.
+- Double-click **`run_tests.bat`** to execute the complete 58-suite automated validation test suite.
+
+---
+
+### Method A: MinGW-w64 GCC Workflow (UCRT64 / MSYS2)
+
+Open PowerShell in the workspace root (`d:\# My Folder\My Work\Visual Studio script\C++\ProjectAres`):
 
 ```powershell
-# 1. Configure CMake build directory
-cmake -B build -A x64
+# 1. Configure the build system (using preset or manual command)
+cmake --preset windows-mingw
+# or manually:
+cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DFETCHCONTENT_FULLY_DISCONNECTED=ON
 
-# 2. Compile both the application and the automated test runner in Release mode
-cmake --build build --config Release --target TorqueLabNative TorqueLabNativeTests
+# 2. Compile the interactive simulator and the test suite in parallel
+cmake --build build --target MANTIS MANTISTests -j 6
+
+# 3. Launch the interactive simulation window (1440x900 OpenGL 3.3)
+.\build\MANTIS.exe
+
+# 4. Run the 58-suite automated physics & navigation validation tests
+.\build\MANTISTests.exe
+# or via the primary binary:
+.\build\MANTIS.exe --tests
+
+# 5. Run headless smoke test (quick headless sanity check)
+.\build\MANTIS.exe --smoke-test
+
+# 6. Run live timing diagnostics & telemetry table
+.\build\MANTIS.exe --diag
 ```
 
 ---
 
-## 3. Controls & Proving Ground Layout
+### Method B: Visual Studio 2022 / 2026 (MSVC) Workflow
 
-### Controller Controls (Forza Horizon Default Layout)
+Open Developer PowerShell for Visual Studio:
 
-| Action | Xbox Controller | PlayStation Controller | Behavior / Notes |
+```powershell
+# 1. Configure using the MSVC preset
+cmake --preset windows-msvc
+
+# 2. Build Release configuration
+cmake --build build --config Release --target MANTIS MANTISTests -j 6
+
+# 3. Run the executable from build/Release/
+.\build\Release\MANTIS.exe
+.\build\Release\MANTISTests.exe
+```
+
+---
+
+### Windows 11 Smart App Control (SAC) Note
+On Windows 11 systems with **Smart App Control (SAC)** enabled:
+- SAC automatically flags newly compiled unsigned binaries (`Publisher: Unknown`) when double-clicked through Windows Explorer.
+- **Recommended Developer Fix:** Open **Windows Security** $\rightarrow$ **App & browser control** $\rightarrow$ **Smart App Control settings** $\rightarrow$ set to **Off**. *(Your system remains fully protected by Windows Defender Antivirus and Real-Time Protection).*
+- Alternatively, launching directly via PowerShell (`.\build\MANTIS.exe`), Visual Studio (F5), or via `run.bat` runs cleanly without SAC intervention.
+
+---
+
+## 5. Controls & User Interface Reference
+
+### Rover Driving Controls
+| Action | Keyboard | Xbox Gamepad | PlayStation Controller |
 | :--- | :--- | :--- | :--- |
-| **Accelerate** | **`RT`** | **`R2`** | Analog trigger ($0.0 \to 1.0$) with deadzone & curve |
-| **Brake / Reverse** | **`LT`** | **`L2`** | Analog trigger ($0.0 \to 1.0$); auto-reverses when stopped in `AUTO` |
-| **Steer Left / Right** | **Left Stick (X)** | **Left Stick (X)** | Analog horizontal axis with speed-sensitive Ackermann limits |
-| **Handbrake** | **`A`** | **`Cross`** | Locks rear wheels ($3,400\text{ N}\cdot\text{m}$) |
-| **Shift Up** | **`B`** | **`Circle`** | Upshift in `MANUAL` transmission mode |
-| **Shift Down** | **`X`** | **`Square`** | Downshift in `MANUAL` transmission mode |
-| **Reset Vehicle** | **`Y` (Hold)** | **`Triangle` (Hold)** | Hold for $0.45\text{ s}$ to recover vehicle to equilibrium |
-| **Look Around** | **Right Stick** | **Right Stick** | $360^\circ$ analog free-look camera orbit |
-| **Change Camera** | **`R3` (Stick Click)** | **`R3` (Stick Click)** | Cycles Follow $\to$ Orbit $\to$ Suspension Rig $\to$ Driver Hood |
-| **Transmission Mode**| **`LB`** | **`L1`** | Toggles Automatic vs. Manual transmission |
-| **Switch Car Model** | **`RB`** | **`R1`** | Cycles BMW M4 $\to$ Dodge Challenger $\to$ Procedural Coupe |
-| **Pause Simulation** | **`Start` / `Menu`** | **`Options`** | Pauses physics; routes gamepad to ImGui menus |
-| **Visual Alignment** | **`Back` / `View`** | **`Share` / `Touchpad`**| Toggles 3D collision wireframe & visual alignment gizmos |
-| **Cycle Proving Zone**| **`D-Pad Left/Right`**| **`D-Pad Left/Right`** | Teleports to previous / next Proving Ground test zone |
-| **Toggle Telemetry** | **`D-Pad Up`** | **`D-Pad Up`** | Toggles telemetry cards and 4-band oscilloscope |
-| **Toggle 3D Gizmos** | **`D-Pad Down`** | **`D-Pad Down`** | Toggles 3D force arrows, CoM marker, and friction circles |
+| **Drive Forward** | `W` / `Up Arrow` | `Right Trigger (RT)` | `R2 Trigger` |
+| **Reverse / Brake** | `S` / `Down Arrow` | `Left Trigger (LT)` | `L2 Trigger` |
+| **Steer Left** | `A` / `Left Arrow` | `Left Stick Left` | `Left Stick Left` |
+| **Steer Right** | `D` / `Right Arrow` | `Left Stick Right` | `Left Stick Right` |
+| **Holding Brake / Zero-Creep** | `Spacebar` | `X Button` | `Square Button` |
+| **Hold-to-Recover Vehicle Reset** | `R` (Hold 0.5s) | `Y Button` (Hold 0.5s) | `Triangle` (Hold 0.5s) |
+| **Cycle Rover Model** | `V` | `B Button` / `RB` | `Circle` / `R1` |
+| **Cycle Camera Mode** | `C` | `Right Stick Click (RS)` | `R3 Click` |
+| **Free Look-Around Camera** | Mouse Drag | `Right Analog Stick` | `Right Analog Stick` |
 
-### Keyboard & Mouse Controls
-
+### Autonomous Navigation & Map Interaction
 | Key / Input | Action |
 | :--- | :--- |
-| **`W` / `Up Arrow`** | Progressive Throttle |
-| **`S` / `Down Arrow`** | Service Brakes (automatically shifts to Reverse when stopped in `AUTO` mode) |
-| **`A` / `Left Arrow`** | Steer Left |
-| **`D` / `Right Arrow`** | Steer Right |
-| **`Space`** | Rear-Wheel Handbrake |
-| **`B`** | Cycle Car Model (BMW M4 $\to$ Dodge Challenger $\to$ Procedural Coupe) |
-| **`V`** | Toggle Visual Alignment Debug Gizmos |
-| **`M`** | Toggle Automatic / Manual Transmission |
-| **`E` / `Q`** | Manual Upshift / Downshift |
-| **`R`** | Reset Vehicle to clean equilibrium state |
-| **`C`** | Cycle Camera (`Chase Follow` $\to$ `Orbit Inspection` $\to$ `Suspension Rig` $\to$ `Driver Hood`) |
-| **`P` / `Escape`** | Pause / Resume Physics Simulation |
-| **`T`** | Toggle Telemetry Table & Real-Time Oscilloscope |
-| **`G`** | Toggle 3D Force Vectors, Raycasts & Friction Circles |
-| **`1` – `7`** | Instant Teleport to Proving Ground Zones 1–7 |
-| **Left Mouse Drag + Scroll** | Orbit Camera Azimuth / Elevation & Zoom (in `Orbit Inspection` mode) |
-
-### Proving Ground Test Zones (`1`–`7` or Top Bar)
-1. **1 Main Straight (`1`):** High-speed acceleration & braking runway on Dry Asphalt ($\mu = 1.00$) with $25\text{ m}$ distance posts.
-2. **2 Handling Circle (`2`):** North steady-state cornering skidpad ($R = 28\text{ m}$) for body roll and understeer/oversteer analysis.
-3. **3 Wet Skidpad (`3`):** Reduced-grip Wet Asphalt ($\mu = 0.68$) braking & cornering zone.
-4. **4 Rally & Ice (`4`):** Loose Gravel rally lane ($\mu = 0.54$) and low-grip Polished Ice sheet ($\mu = 0.18$).
-5. **5 Bump Course (`5`):** Rhythmic suspension compression, rebound & damper dissipation course.
-6. **6 Elevation Ramp (`6`):** Inclined launch ramp and landing ramp for airborne trajectory & suspension bump-stop testing.
-7. **7 Slalom & Obstacles (`7`):** Slalom bollards and perimeter barrier walls for transient weight-transfer & collision momentum testing.
+| **`M`** | Toggle Topographical Minimap HUD on/off. |
+| **Left Click on Minimap** | Set new target coordinates $\rightarrow$ calculates optimal $A^*$ path and immediately starts autonomous driving. |
+| **`Escape`** | Cancel active autonomous navigation mission and halt rover. |
+| **Manual Override** | Tapping any drive input (`W/A/S/D`) immediately yields control to the pilot; releasing controls auto-resumes autonomous waypoint navigation after 0.8s. |
 
 ---
 
-## 4. Repository Structure
+## 6. Automated Validation & Physics Verification
+
+MANTIS incorporates a rigorous, automated 58-suite unit, validation, and comparative regression test harness (`MANTISTests.exe`). Every build continuously validates the mathematical and physical integrity of the simulation:
+
+- **Units 1–8:** Suspension kinematics, Hooke springs, dampers, Pacejka combined slip friction circles, Ackermann steering angles, and aerodynamic drag.
+- **Units 9–12:** V-HACD collision decomposition, topological convex hulls, CCD, and obstacle collision dynamics.
+- **Units 13–15:** Controller input normalization, baseline calibration guards, and physics-driven haptics.
+- **Units 16–20:** Volumetric wheel contact, curb climbing, fender clearance, and zero-creep parking stiction.
+- **Units 21–30:** Multi-point contact patch integration, structural tyre compliance, and vehicle asset validation.
+- **Units 31–38:** Mars environmental gravity, HiRISE DTM coordinate alignment, rocker-bogie differential equilibrium, and wheel anti-sinkage elevation mapping.
+- **Units 39–45:** Multi-octave procedural terrain generation, crater profiles, rock collision, NavGrid traversability, and $A^*$ pathfinding admissibility.
+- **Validation Tests A–J:** Static equilibrium, longitudinal load transfer, service braking dive, cornering roll, low-grip ice surfaces, time-step independence (30 vs 60 vs 120 FPS), and coasting energy conservation.
+- **Controlled Tests 1–3:** Analytical force verification ($a = F/m$), zero-resistance comparisons, and scale sanity ($d = v \cdot t$).
 
 ```text
-TorqueLab/
-├── CMakeLists.txt                    # Native C++20 build definition (Bullet, GLFW, ImGui, V-HACD)
-├── CMakePresets.json                 # MSVC x64 build presets
-├── README.md                         # Project documentation and engineering guide
-├── GEMINI.md                         # Single-source-of-truth project memory & physical conventions
-├── model/                            # Vehicle 3D assets & collision cache
-│   ├── BMW_M4.glb                    # Primary 743k-tri high-poly PBR model
-│   ├── BMW_M4_manifest.json          # Node hierarchy & semantic role manifest
-│   ├── textures/                     # 2048x2048 PBR livery and emblem textures
-│   └── cache/                        # Cached volumetric collision hulls (*_collision.json)
-├── settings/
-│   └── controller_config.json        # Persistent controller deadzones, sensitivities & rebinds
-├── shaders/                          # GLSL 330 Core Shaders
-│   ├── shadow_depth.vert/.frag       # Directional sun shadow depth pass
-│   ├── phong_shadow.vert/.frag       # Blinn-Phong + PCF shadows + glass transparency + fog
-│   └── debug_line.vert/.frag         # 3D force vector gizmos & collision wireframes
-├── third_party/
-│   ├── glad/                         # OpenGL 3.3 Core Profile loader
-│   ├── cgltf/                        # Single-header glTF 2.0 / GLB parser
-│   └── vhacd/                        # V-HACD volumetric convex decomposition library
-├── src/
-│   ├── app/                          # Lifecycle & main loop
-│   │   ├── main.cpp                  # CLI entry point (--smoke-test, --diag)
-│   │   └── Application.h/.cpp        # GLFW window, 120 Hz accumulator loop, 2-pass renderer
-│   ├── physics/                      # Core Math, Bullet World & Collision Generation
-│   │   ├── Math3D.h                  # Vec3, Quat, Mat4, VehicleBasis & Euler angle extraction
-│   │   ├── CollisionMeshGeometry.h   # Raw mesh geometry & convex hull definitions
-│   │   ├── VehicleCollisionGenerator.h/.cpp # V-HACD decomposition & vehicle parameter derivation
-│   │   ├── SurfaceSystem.h/.cpp      # Road surface registry (6 surfaces) & friction coefficients
-│   │   └── PhysicsWorld.h/.cpp       # Bullet world, Proving Ground track, 7 spawn presets
-│   ├── vehicle/                      # 6-DOF Vehicle Subsystems
-│   │   ├── VehicleConfig.h           # Physical vehicle configuration struct
-│   │   ├── WheelState.h              # Per-wheel contact, suspension, slip, forces & torques
-│   │   ├── SuspensionSystem.h/.cpp   # Spring-damper, bump stop & anti-roll bar mechanics
-│   │   ├── TireModel.h/.cpp          # Pacejka Magic Formula, load sensitivity & friction circle
-│   │   ├── SteeringSystem.h/.cpp     # Speed-sensitive steering & Ackermann geometry
-│   │   ├── Drivetrain.h/.cpp         # Torque curve, rev limiter, 6-speed gearbox & viscous LSD
-│   │   ├── BrakeSystem.h/.cpp        # Front/rear service brakes & rear mechanical handbrake
-│   │   ├── Aerodynamics.h/.cpp       # Quadratic drag, aerodynamic downforce & rolling resistance
-│   │   ├── VehicleBody.h/.cpp        # Rigid body wrapper, collision impulse detection & scrapes
-│   │   └── VehicleDynamics.h/.cpp    # Master 120 Hz orchestrator & suspension haptic event detection
-│   ├── renderer/                     # OpenGL 3.3 Rendering Subsystem
-│   │   ├── Shader.h/.cpp             # GLSL shader compilation & uniform cache
-│   │   ├── Mesh.h/.cpp               # Procedural primitives (boxes, cylinders, rings)
-│   │   ├── Texture2D.h/.cpp          # Procedural surface grain textures & PNG loaders
-│   │   ├── ShadowMapFBO.h/.cpp       # 2048x2048 depth framebuffer for sun shadows
-│   │   ├── ModelLoaderGLB.h/.cpp     # glTF 2.0 parser & semantic vehicle hierarchy binder
-│   │   ├── VehicleRendererGL.h/.cpp  # Master vehicle renderer (BMW M4 / Procedural Coupe)
-│   │   ├── TrackRendererGL.h/.cpp    # Track element meshes, distance markers & surfaces
-│   │   ├── DebugOverlayGL.h/.cpp     # 3D force gizmos, CoM marker & skidmarks
-│   │   └── CameraControllerGL.h/.cpp # Chase Follow, Orbit, Suspension & Hood cameras
-│   ├── input/                        # Controller & Input Subsystem
-│   │   ├── ControllerConfig.h/.cpp   # Logical actions, Forza mappings, glyphs & JSON persistence
-│   │   ├── VibrationManager.h/.cpp   # Event-driven XInput haptics (collisions, suspension, scrapes)
-│   │   └── InputControllerGLFW.h/.cpp# Gamepad polling, baseline calibration & rebinding
-│   └── ui/
-│       └── ImGuiDashboard.h/.cpp     # Top bar, live tuning panel, telemetry, cluster & oscilloscope
-└── tests/
-    └── native_validation_tests.cpp   # 27 automated test suites (Unit 1–14, Tests A–J, Controlled 1–3)
+====================================================================
+ MANTIS — Automated Physics & Autonomous Rover Validation Suite
+====================================================================
+ Summary: 58 / 58 test suites passed (0 failed assertions).
+====================================================================
 ```
 
 ---
 
-## 5. Verification & Benchmark Summary (`28 / 28` Suites Passing)
+## 7. Directory & Workspace Structure
 
-All physical behaviors are continuously validated via the automated C++ test harness (`TorqueLabNativeTests.exe`):
-
-| Test Suite | Result | Verified Physical Behavior & Benchmark Numbers |
-| :--- | :---: | :--- |
-| **Unit 1–8** | **PASS** | Suspension signs, coordinate transforms, Pacejka friction circles, slip kinematics, engine torque curve & LSD, surface hierarchy, Ackermann steering, quadratic aerodynamic drag. |
-| **Unit 9–12** | **PASS** | Model-derived collision pipeline, dynamic hull stability, continuous collision detection (CCD), collision lifecycle, and vehicle switching integrity. |
-| **Unit 13** | **PASS** | Forza-inspired controller mapping, trigger normalization, steering deadzone/sensitivity curves, and JSON serialization roundtrip. |
-| **Unit 14** | **PASS** | **Physics-Driven Haptics & RPM Vibration Elimination:** Stationary engine redline at 7,000 RPM yields strictly 0.0% vibration; high-speed cruising yields 0.0% vibration; collision scaling, lateral motor bias, jump landing thuds, and bump-stop jolts verified. |
-| **Unit 15** | **PASS** | **Multi-Vehicle Presets & Muscle Car Tuning:** 1970 Dodge Challenger R/T 426 Hemi specs ($1,680\text{ kg}$, $2.794\text{ m}$ wheelbase, $664\text{ N}\cdot\text{m}$ peak torque, 4-speed manual gearbox, Dana 60 LSD) and zero-leak 3-way vehicle switching verified. |
-| **Test A (Static Equilibrium)** | **PASS** | Settled tire load $\sum F_z = 14,715.0\text{ N}$ ($0.000\%$ error vs $mg = 14,715.0\text{ N}$); ride height $= 0.4910\text{ m}$; suspension compression $= 0.1093\text{ m}$. |
-| **Test B (Acceleration & Squat)** | **PASS** | At $t = 2.0\text{ s}$: $v = 10.48\text{ m/s}$ ($37.7\text{ km/h}$), $a_x = +5.27\text{ m/s}^2$, rear squat pitch $= +0.800^\circ$, rear load transfer $\Delta F_{z,\text{rear}} = +1315\text{ N}$. |
-| **Test C (Braking & Dive)** | **PASS** | Service braking from $20\text{ m/s}$: $a_x = -9.68\text{ m/s}^2$, front dive pitch $= -1.614^\circ$, $F_{z,\text{front}} = 9,985\text{ N}$ vs $F_{z,\text{rear}} = 4,696\text{ N}$. |
-| **Test D (Cornering & Roll)** | **PASS** | Left turn roll $= +2.31^\circ$ ($a_y = +9.49\text{ m/s}^2$); Right turn roll $= -2.28^\circ$ ($a_y = -9.36\text{ m/s}^2$). |
-| **Test E (Surface Hierarchy)** | **PASS** | Dry asphalt launch $v = 5.94\text{ m/s}$, stopping distance $= 11.49\text{ m}$ vs Ice launch $v = 1.23\text{ m/s}$, stopping distance $= 52.01\text{ m}$. |
-| **Test F (Speed Bump Response)** | **PASS** | Equilibrium compression $0.109\text{ m} \to$ Peak front $0.191\text{ m}$, peak pitch $2.88^\circ \to$ settles cleanly to $0.07^\circ$. |
-| **Test G (Parameter Sensitivity)** | **PASS** | Stiffer springs reduce compression by $37.5\%$; high CoM increases body roll from $1.78^\circ$ to $3.58^\circ$ ($+101\%$). |
-| **Test H (Collision Transfer)** | **PASS** | Post-crash vehicle stops cleanly at barrier ($Z = 11.15\text{ m}$) without tunneling; recovery reset restores clean state. |
-| **Test I (Timestep Independence)**| **PASS** | Fixed $1/120\text{ s}$ accumulator produces identical trajectories at 30 FPS, 60 FPS, and 120 FPS ($Z = 9.025\text{ m}$, $V = 9.672\text{ m/s}$). |
-| **Test J (Coasting Deceleration)**| **PASS** | Initial speed $25.00\text{ m/s} \to 24.13\text{ m/s}$ over $3.0\text{ s}$ matching analytical aerodynamic + rolling resistance loss. |
-| **Controlled 1–3** | **PASS** | Constant force $a = F/m$ verified ($3.869\text{ m/s}^2$ vs expected $3.867\text{ m/s}^2$); zero-resistance baseline; scale sanity ($d = v \cdot t = 50.005\text{ m}$ over $2.0\text{ s}$). |
+```
+ProjectAres/
+├── CMakeLists.txt                # Root CMake project file (targets: MANTIS, MANTISTests)
+├── CMakePresets.json             # Build configuration presets for MSVC and MinGW-w64
+├── run.bat                       # 1-click launcher for MANTIS interactive simulator
+├── run_tests.bat                 # 1-click launcher for MANTIS automated test suite
+├── Commands.txt                  # CLI reference cheat-sheet
+├── GEMINI.md                     # AI context & single-source-of-truth project memory
+├── README.md                     # Comprehensive project documentation
+├── model/                        # 3D glTF 2.0 assets (Perseverance, Curiosity, Opportunity, DTM)
+│   ├── PerseveranceRover.glb     # NASA Perseverance Rover primary 3D asset
+│   ├── terrain/                  # High-resolution Mars digital elevation models
+│   └── cache/                    # Pre-baked convex collision hull caches (.json)
+├── shaders/                      # GLSL 330 core shaders
+│   ├── phong_shadow.vert/.frag   # Cook-Torrance PBR, shadows & metric surface grid
+│   ├── shadow_depth.vert/.frag   # Cascaded directional shadow map generation
+│   └── debug_line.vert/.frag     # 3D force vector gizmos & path trajectory lines
+├── src/
+│   ├── app/                      # Application lifecycle & main CLI entry point
+│   ├── input/                    # Controller mapping, baseline calibration & XInput haptics
+│   ├── navigation/               # NavGrid, AStarPlanner, PathFollower, MinimapRenderer
+│   ├── physics/                  # Bullet dynamics world, math primitives & surface system
+│   ├── renderer/                 # ModelLoaderGLB, TrackRendererGL, VehicleRendererGL, PBR
+│   ├── terrain/                  # TerrainManager, ProceduralPlanetMap, ProceduralTerrainGenerator
+│   ├── ui/                       # Dear ImGui exploration dashboard & rover telemetry console
+│   └── vehicle/                  # RockerBogieSuspension, WheelState, VehicleDynamics
+└── tests/                        # 58-suite automated unit, validation & regression harness
+```
 
 ---
 
-## 6. License & Credits
-
-- **Physics & Simulation Engine:** Built by the Project Torque team using native C++20 and Bullet Physics.
-- **Rendering & UI:** OpenGL 3.3 Core Profile, GLFW 3.4, GLAD, and Dear ImGui.
-- **Asset Credits:** BMW M4 Coupe 3D model and textures under editorial/educational simulation license.
+## 8. License & Attribution
+- Developed as part of the **AstroGenesis** exploration initiative.
+- Rover 3D models and elevation datasets courtesy of **NASA / JPL-Caltech / University of Arizona (HiRISE)**.

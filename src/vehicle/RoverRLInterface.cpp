@@ -1,5 +1,5 @@
 /**
- * Project ARES — Autonomous Rover Exploration Simulator.
+ * Project MANTIS — Autonomous Rover Exploration Simulator.
  * Reinforcement Learning (RL) Observation & Actuator Implementation.
  */
 

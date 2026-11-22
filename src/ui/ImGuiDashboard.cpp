@@ -200,7 +200,7 @@ void ImGuiDashboard::renderTopBar(
 
     if (ImGui::Begin("##TopBar", nullptr, flags)) {
         ImGui::PushStyleColor(ImGuiCol_Button, hexToImVec4(0xb45309, 0.95f));
-        ImGui::Button("PROJECT ARES");
+        ImGui::Button("MANTIS");
         ImGui::PopStyleColor();
         ImGui::SameLine();
         if (terrainManager && terrainManager->getActiveMap()) {
@@ -288,7 +288,7 @@ void ImGuiDashboard::renderTopBar(
                 {"perseverance_rover", "Mars Perseverance Rover"},
                 {"curiosity_rover", "Mars Curiosity Rover"},
                 {"opportunity_mer", "MER Opportunity Rover"},
-                {"procedural_rover", "ARES Prototype Rover (Procedural)"}
+                {"procedural_rover", "MANTIS Prototype Rover (Procedural)"}
             };
         }
 
@@ -398,7 +398,7 @@ void ImGuiDashboard::renderLeftPanels(
     ImGui::SetNextWindowSize(ImVec2(325.0f, maxPanelHeight), ImGuiCond_Always);
 
     const ImGuiWindowFlags flags = ImGuiWindowFlags_NoSavedSettings;
-    if (ImGui::Begin("PROJECT ARES — CONTROLS & ENVIRONMENT", nullptr, flags)) {
+    if (ImGui::Begin("MANTIS — CONTROLS & ENVIRONMENT", nullptr, flags)) {
         if (terrainManager && ImGui::CollapsingHeader("PLANETARY ENVIRONMENT & TERRAIN", ImGuiTreeNodeFlags_DefaultOpen)) {
             const auto& maps = terrainManager->getAvailableMaps();
             const std::string curMapId = terrainManager->getActiveMapId();
@@ -445,7 +445,7 @@ void ImGuiDashboard::renderLeftPanels(
                     {"perseverance_rover", "Mars Perseverance Rover"},
                     {"curiosity_rover", "Mars Curiosity Rover"},
                     {"opportunity_mer", "MER Opportunity Rover"},
-                    {"procedural_rover", "ARES Prototype Rover (Procedural)"}
+                    {"procedural_rover", "MANTIS Prototype Rover (Procedural)"}
                 };
             }
 

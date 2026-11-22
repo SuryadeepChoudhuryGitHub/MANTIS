@@ -1,7 +1,7 @@
 #define CGLTF_IMPLEMENTATION
 #include "cgltf.h"
 
-#if defined(ARES_HAS_DRACO) && ARES_HAS_DRACO
+#if (defined(MANTIS_HAS_DRACO) && MANTIS_HAS_DRACO) || (defined(ARES_HAS_DRACO) && ARES_HAS_DRACO)
 #include <draco/compression/decode.h>
 #endif
 
@@ -431,7 +431,7 @@ bool ModelLoaderGLB::loadFromFile(
             std::vector<VertexPNU> vertices;
             std::vector<unsigned int> indices;
 
-#if defined(ARES_HAS_DRACO) && ARES_HAS_DRACO
+#if (defined(MANTIS_HAS_DRACO) && MANTIS_HAS_DRACO) || (defined(ARES_HAS_DRACO) && ARES_HAS_DRACO)
             if (prim->has_draco_mesh_compression) {
                 const cgltf_buffer_view* bv = prim->draco_mesh_compression.buffer_view;
                 if (bv) {

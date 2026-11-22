@@ -1,6 +1,6 @@
 #pragma once
 /**
- * PROJECT ARES — Procedural Planetary Terrain Generator.
+ * PROJECT MANTIS — Procedural Planetary Terrain Generator.
  *
  * Implements deterministic multi-scale gradient noise (Fractal Brownian Motion),
  * analytical geological impact crater modelling, scattered rock obstacle generation,

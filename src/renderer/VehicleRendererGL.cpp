@@ -68,7 +68,7 @@ void VehicleRendererGL::init(const VehicleConfig& config) {
     }
 
     // Always include procedural rover option
-    m_availableVehicles.push_back({"procedural_rover", "ARES Prototype Rover"});
+    m_availableVehicles.push_back({"procedural_rover", "MANTIS Prototype Rover"});
 
     // Set initial active model based on vehicle config
     setActiveVehicleModel(config.id);

@@ -1,6 +1,6 @@
 #pragma once
 /**
- * PROJECT ARES — Terrain Chunk Representation.
+ * PROJECT MANTIS — Terrain Chunk Representation.
  *
  * Encapsulates a spatially partitioned, bounded, and culled terrain mesh chunk
  * with stable world-space positioning and LOD support.

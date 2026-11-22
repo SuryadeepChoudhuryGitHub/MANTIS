@@ -1,6 +1,6 @@
 #pragma once
 /**
- * Project ARES — Autonomous Rover Exploration Simulator.
+ * Project MANTIS — Autonomous Rover Exploration Simulator.
  *
  * Reinforcement Learning (RL) & Autonomous Navigation Telemetry / Actuator Interface.
  * Defines structured, normalized observation states and actuation commands for

@@ -1,6 +1,6 @@
 #pragma once
 /**
- * PROJECT ARES — A* Autonomous Planetary Path Planner.
+ * PROJECT MANTIS — A* Autonomous Planetary Path Planner.
  *
  * Implements optimal grid pathfinding with:
  * - Admissible Euclidean distance heuristic.

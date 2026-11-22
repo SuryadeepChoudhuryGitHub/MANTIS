@@ -1,6 +1,6 @@
 #pragma once
 /**
- * PROJECT ARES — Centralized Planetary Environment System.
+ * PROJECT MANTIS — Centralized Planetary Environment System.
  *
  * Defines physical, atmospheric, and optical parameters for planetary bodies
  * (Earth, Mars, and future celestial environments).

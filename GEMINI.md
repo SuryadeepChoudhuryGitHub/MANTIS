@@ -1,4 +1,4 @@
-# GEMINI.md — Project ARES (AI Context & Project Memory)
+# GEMINI.md — MANTIS (AI Context & Project Memory)
 
 > **Purpose of this file:** This document is the single-source-of-truth project memory for **Gemini** and other AI coding agents. Read this file **first** when starting a new session or switching models—it provides the complete architecture, file map, coordinate/unit conventions, physics pipeline, hardware/driver quirks on this machine, and verified benchmark numbers so you do not need to scan the entire codebase.
 
@@ -6,9 +6,9 @@
 
 ## 1. Project Identity & Non-Negotiable Engineering Rules
 
-- **Project Name:** **PROJECT ARES** (*Autonomous Rover Exploration Simulator*)
+- **Project Name:** **MANTIS** (*Mars Autonomous Navigation & Terrain Intelligent Simulator*)
 - **Tech Stack:** Native **C++20**, **OpenGL 3.3 Core Profile**, **GLSL 330 core**, **GLFW 3.4**, **GLAD**, **Bullet Physics (`btDiscreteDynamicsWorld`)**, **Dear ImGui**, and **CMake** (Visual Studio 2026 / MSVC and MinGW-w64 UCRT64 GCC 16 Release builds).
-- **Project Domain:** High-fidelity autonomous planetary rover mobility and multi-resolution extraterrestrial terrain simulation. All legacy road cars (BMW, Dodge, Hummer) have been completely eliminated. The active fleet comprises **NASA Perseverance Rover (Mars 2020)**, **NASA Curiosity Rover (MSL)**, **NASA Opportunity Rover (MER)**, and the **ARES Prototype Rover**.
+- **Project Domain:** High-fidelity autonomous planetary rover mobility and multi-resolution extraterrestrial terrain simulation. All legacy road cars (BMW, Dodge, Hummer) have been completely eliminated. The active fleet comprises **NASA Perseverance Rover (Mars 2020)**, **NASA Curiosity Rover (MSL)**, **NASA Opportunity Rover (MER)**, and the **MANTIS Prototype Rover**.
 - **Core Physical Rule (Non-Negotiable):**
   - **Every rover behavior must emerge from coherent physical laws** (forces, torques, mass, rotational inertia, tire-ground slip, friction-circle saturation, suspension compression/rebound, terramechanics, and collision impulse transfer).
   - **NEVER** introduce fake animations, arbitrary speed multipliers, unphysical engine power multipliers, or unjustified gravity hacks.
@@ -27,22 +27,21 @@ cmake --preset windows-mingw
 cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DFETCHCONTENT_FULLY_DISCONNECTED=ON
 
 # 2. Build both the main application and the automated test runner (Release)
-cmake --build build --target ProjectARES ProjectARESTests -j 6
+cmake --build build --target MANTIS MANTISTests -j 6
 
 # 3. Run interactive desktop application (1440x900 OpenGL 3.3 window)
-.\build\ProjectARES.exe
-# (TorqueLabNative.exe compatibility binary is also produced)
+.\build\MANTIS.exe
 
-# 4. Run the 47-suite automated unit, validation & regression test harness
-.\build\ProjectARES.exe --tests
+# 4. Run the 58-suite automated unit, validation & regression test harness
+.\build\MANTIS.exe --tests
 # or via standalone test binary:
-.\build\ProjectARESTests.exe
+.\build\MANTISTests.exe
 
 # 5. Run headless OpenGL + physics smoke test
-.\build\ProjectARES.exe --smoke-test
+.\build\MANTIS.exe --smoke-test
 
 # 6. Run full-pipeline acceleration telemetry table + 600-frame live OpenGL timing diagnostics
-.\build\ProjectARES.exe --diag
+.\build\MANTIS.exe --diag
 ```
 
 ### Visual Studio 2026 / MSVC Workflow:
@@ -51,12 +50,12 @@ cmake --build build --target ProjectARES ProjectARESTests -j 6
 cmake --preset windows-msvc
 
 # 2. Build Release targets
-cmake --build build --config Release --target ProjectARES ProjectARESTests -j 6
+cmake --build build --config Release --target MANTIS MANTISTests -j 6
 
 # 3. Run from build/Release/
-.\build\Release\ProjectARES.exe
-.\build\Release\ProjectARES.exe --tests
-.\build\Release\ProjectARESTests.exe
+.\build\Release\MANTIS.exe
+.\build\Release\MANTIS.exe --tests
+.\build\Release\MANTISTests.exe
 ```
 
 ---

@@ -1,6 +1,6 @@
 #pragma once
 /**
- * PROJECT ARES — Terrain Map Interface & Data Structures.
+ * PROJECT MANTIS — Terrain Map Interface & Data Structures.
  *
  * Defines the contract for planetary simulation maps (Earth Proving Ground,
  * photogrammetric Mars site meshes, and HiRISE Digital Terrain Models).

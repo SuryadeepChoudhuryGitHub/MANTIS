@@ -2921,7 +2921,7 @@ namespace torquelab {
 int runAllValidationTests() {
     g_failedAssertions = 0;
     std::cout << "====================================================================\n";
-    std::cout << " Project ARES — Automated Physics & Autonomous Rover Validation Suite\n";
+    std::cout << " MANTIS — Automated Physics & Autonomous Rover Validation Suite\n";
     std::cout << "====================================================================\n";
 
     struct TestCase {
@@ -2960,8 +2960,8 @@ int runAllValidationTests() {
         {"Unit 28: World-Space Tyre Ground Penetration Elimination & Flush Contact Patch", unitTest28_WorldSpaceTireDeformationGroundPenetration},
         {"Unit 29: Hummer H2 Off-Road Physics, AWD Drivetrain & Collision Geometry", unitTest29_HummerOffRoadVehiclePhysicsAndCollisionDerivation},
         {"Unit 30: Automated Vehicle Asset Validation & Universal Model Importer", unitTest30_VehicleAssetValidationAndUniversalModelImporter},
-        {"Unit 31: Planetary Environment & Mars Surface Physics (ARES Foundation)", unitTest31_PlanetaryEnvironmentAndMarsSurfacePhysics},
-        {"Unit 32: Terrain World Transform Stability & Physics Alignment (ARES Bug Fix)", unitTest32_TerrainWorldTransformStabilityAndPhysicsAlignment},
+        {"Unit 31: Planetary Environment & Mars Surface Physics (MANTIS Foundation)", unitTest31_PlanetaryEnvironmentAndMarsSurfacePhysics},
+        {"Unit 32: Terrain World Transform Stability & Physics Alignment (MANTIS Bug Fix)", unitTest32_TerrainWorldTransformStabilityAndPhysicsAlignment},
         {"Unit 33: Mars Rover Drivetrain, Low CoM & Planetary Suspension", unitTest33_MarsRoverDrivetrainAndSuspensionPhysics},
         {"Unit 34: Map Switching Lifecycle & Multi-Terrain Integrity", unitTest34_MapSwitchingLifecycleAndResourceIntegrity},
         {"Unit 35: 6-Wheel Rocker-Bogie Kinematic Articulation & Differential Coupling", unitTest35_SixWheelRockerBogieKinematicsAndDifferentialCoupling},

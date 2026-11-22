@@ -133,7 +133,7 @@ int main(int argc, char** argv) {
 
     if (smokeTest) {
         const std::string report = app.runValidationSuite();
-        std::cout << "[ProjectARES Smoke Test] " << report << std::endl;
+        std::cout << "[MANTIS Smoke Test] " << report << std::endl;
         return app.run(15);
     }
 

@@ -1,6 +1,6 @@
 #pragma once
 /**
- * PROJECT ARES — Interactive Topographical Minimap & Route Visualization.
+ * PROJECT MANTIS — Interactive Topographical Minimap & Route Visualization.
  *
  * Implements a 2D top-down planetary minimap supporting:
  * - Mode A: Textured planetary terrain surface (Mars iron-oxide / Moon lunar basalt).

@@ -1,6 +1,6 @@
 #pragma once
 /**
- * PROJECT ARES — 6-Wheel Passive Rocker-Bogie Mobility System.
+ * PROJECT MANTIS — 6-Wheel Passive Rocker-Bogie Mobility System.
  *
  * Implements the authentic NASA Mars 2020 (Perseverance) & MSL (Curiosity)
  * rocker-bogie kinematic suspension system:

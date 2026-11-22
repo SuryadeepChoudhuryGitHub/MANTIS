@@ -1,6 +1,6 @@
 #pragma once
 /**
- * PROJECT ARES — Procedural Planetary Map Implementation.
+ * PROJECT MANTIS — Procedural Planetary Map Implementation.
  *
  * Implements the ITerrainMap interface for dynamically generated procedural Mars,
  * Moon, and scenario test worlds, unifying Bullet physics collision, OpenGL rendering,

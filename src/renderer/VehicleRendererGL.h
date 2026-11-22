@@ -133,7 +133,7 @@ private:
     };
 
     // Procedural rover model data
-    std::string m_proceduralModelName{"ARES Prototype Rover"};
+    std::string m_proceduralModelName{"MANTIS Prototype Rover"};
     std::string m_proceduralId{"procedural_rover"};
     std::vector<VehicleChoice> m_availableVehicles;
     std::vector<ChassisPart> m_chassisParts;

@@ -1,6 +1,6 @@
 #pragma once
 /**
- * PROJECT ARES — Central Terrain Manager & Multi-Map Registry.
+ * PROJECT MANTIS — Central Terrain Manager & Multi-Map Registry.
  *
  * Manages registration, discovery, and runtime hot-swapping between planetary
  * environments (Earth Proving Ground, Mars Site Alpha, Mars Site Beta, and HiRISE DTM).

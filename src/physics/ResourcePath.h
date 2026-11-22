@@ -1,6 +1,6 @@
 #pragma once
 /**
- * PROJECT ARES — Canonical Resource & Asset Path Resolver.
+ * PROJECT MANTIS — Canonical Resource & Asset Path Resolver.
  *
  * Provides deterministic, working-directory-independent asset resolution
  * for shaders, 3D rover models, terrain heightfields, textures, and settings.

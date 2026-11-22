@@ -185,7 +185,7 @@ VehicleConfig createOpportunityRoverConfig() {
 VehicleConfig createProceduralRoverConfig() {
     VehicleConfig cfg = createMarsRoverConfig();
     cfg.id = "procedural_rover";
-    cfg.displayName = "ARES Prototype Rover (Procedural)";
+    cfg.displayName = "MANTIS Prototype Rover (Procedural)";
     cfg.visualType = VehicleVisualType::Procedural;
     return cfg;
 }

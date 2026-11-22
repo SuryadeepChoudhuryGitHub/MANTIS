@@ -3,9 +3,9 @@ cmake_minimum_required(VERSION 3.20)
 # Ensure CMake 4.x compatibility with third-party subprojects (e.g. Bullet3)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "Minimum CMake policy version for subprojects" FORCE)
 
-project(ProjectARES
+project(MANTIS
     VERSION 1.0.0
-    DESCRIPTION "Project ARES — Autonomous Rover Exploration Simulator (C++20 / OpenGL 3.3 / Bullet / Dear ImGui)"
+    DESCRIPTION "MANTIS — Autonomous Rover Exploration Simulator (C++20 / OpenGL 3.3 / Bullet / Dear ImGui)"
     LANGUAGES C CXX
 )
 
@@ -178,13 +178,13 @@ if(DRACO_LIB AND DRACO_INCLUDE_DIR)
     message(STATUS "Found Draco library: ${DRACO_LIB}")
     target_link_libraries(TorqueLabPhysics PUBLIC ${DRACO_LIB})
     target_include_directories(TorqueLabPhysics PUBLIC ${DRACO_INCLUDE_DIR})
-    target_compile_definitions(TorqueLabPhysics PUBLIC ARES_HAS_DRACO=1)
+    target_compile_definitions(TorqueLabPhysics PUBLIC MANTIS_HAS_DRACO=1 ARES_HAS_DRACO=1)
 endif()
 
 # -----------------------------------------------------------------------------
-# 6. Native Desktop Application Target (ProjectARES)
+# 6. Native Desktop Application Target (MANTIS)
 # -----------------------------------------------------------------------------
-add_executable(ProjectARES
+add_executable(MANTIS
     src/app/main.cpp
     src/app/Application.cpp
     src/renderer/VehicleRendererGL.cpp
@@ -196,7 +196,7 @@ add_executable(ProjectARES
     src/ui/ImGuiDashboard.cpp
 )
 
-target_include_directories(ProjectARES PRIVATE
+target_include_directories(MANTIS PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
@@ -219,7 +219,7 @@ target_link_libraries(TorqueLabTestsLib PUBLIC
     glfw
 )
 
-target_link_libraries(ProjectARES PRIVATE
+target_link_libraries(MANTIS PRIVATE
     TorqueLabPhysics
     TorqueLabTestsLib
     glad
@@ -229,36 +229,41 @@ target_link_libraries(ProjectARES PRIVATE
 )
 
 # Copy GLSL shaders and vehicle 3D models next to executable after build for portable execution
-add_custom_command(TARGET ProjectARES POST_BUILD
+add_custom_command(TARGET MANTIS POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/shaders"
-        "$<TARGET_FILE_DIR:ProjectARES>/shaders"
+        "$<TARGET_FILE_DIR:MANTIS>/shaders"
     COMMENT "Copying GLSL shaders to output directory"
 )
 
-add_custom_command(TARGET ProjectARES POST_BUILD
+add_custom_command(TARGET MANTIS POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/model"
-        "$<TARGET_FILE_DIR:ProjectARES>/model"
+        "$<TARGET_FILE_DIR:MANTIS>/model"
     COMMENT "Copying vehicle 3D models to output directory"
 )
 
+# Backwards-compatible alias targets
+add_custom_target(ProjectARES DEPENDS MANTIS)
+
 # -----------------------------------------------------------------------------
-# 7. Automated Comparative Physics & Validation Test Runner (ProjectARESTests)
+# 7. Automated Comparative Physics & Validation Test Runner (MANTISTests)
 # -----------------------------------------------------------------------------
 enable_testing()
 
-add_executable(ProjectARESTests
+add_executable(MANTISTests
     tests/test_main.cpp
 )
 
-target_include_directories(ProjectARESTests PRIVATE
+target_include_directories(MANTISTests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/tests
 )
 
-target_link_libraries(ProjectARESTests PRIVATE
+target_link_libraries(MANTISTests PRIVATE
     TorqueLabTestsLib
 )
 
-add_test(NAME ProjectARESValidationSuite COMMAND ProjectARESTests)
+add_custom_target(ProjectARESTests DEPENDS MANTISTests)
+
+add_test(NAME MANTISValidationSuite COMMAND MANTISTests)

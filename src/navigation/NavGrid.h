@@ -1,6 +1,6 @@
 #pragma once
 /**
- * PROJECT ARES — Autonomous Planetary Navigation Grid & Traversability Analysis.
+ * PROJECT MANTIS — Autonomous Planetary Navigation Grid & Traversability Analysis.
  *
  * Implements a discrete 2D spatial grid over planetary terrain, evaluating:
  * - Slope inclination and rollover risk (pitch and roll limits).
