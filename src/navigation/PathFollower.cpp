@@ -21,6 +21,7 @@ PathFollower::PathFollower(const PathFollowerConfig& config)
     : m_config(config) {}
 
 void PathFollower::setPath(const std::vector<PathWaypoint>& waypoints) {
+    const bool wasNavigating = (m_telemetry.state == NavState::Navigating);
     m_waypoints = waypoints;
     m_telemetry.currentWaypointIndex = 0;
     m_telemetry.totalWaypoints = waypoints.size();
@@ -32,8 +33,10 @@ void PathFollower::setPath(const std::vector<PathWaypoint>& waypoints) {
 
     if (!waypoints.empty()) {
         m_telemetry.destinationWorld = waypoints.back().positionWorld;
+        m_telemetry.state = wasNavigating ? NavState::Navigating : NavState::Idle;
+    } else {
+        m_telemetry.state = NavState::Idle;
     }
-    m_telemetry.state = NavState::Idle;
 }
 
 void PathFollower::clearPath() {

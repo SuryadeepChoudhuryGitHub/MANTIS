@@ -3,6 +3,7 @@
 #include <cmath>
 #include <numeric>
 #include <random>
+#include "renderer/Mesh.h"
 
 namespace torquelab {
 
@@ -515,47 +516,158 @@ std::shared_ptr<ProceduralTerrainData> ProceduralTerrainGenerator::generate(cons
         }
     }
 
-    // 4. Generate Scattered Solid Rock Obstacles with Deterministic Placement
+    // 4. Generate Scattered Solid Rock Obstacles with Spatial Noise Clustering
     if (config.enableRocks && config.numRocks > 0) {
         std::mt19937 rockRng(config.seed + 9999);
+        PerlinNoise densityNoise(config.seed + 104729);
+
         const double margin = 20.0;
         std::uniform_real_distribution<double> distPos(-halfSize + margin, halfSize - margin);
-        std::uniform_real_distribution<double> distScale(config.minRockSize, config.maxRockSize);
-        std::uniform_real_distribution<double> distAspect(0.70, 1.30);
+        std::uniform_real_distribution<double> dist01(0.0, 1.0);
         std::uniform_real_distribution<double> distAngle(0.0, 6.2831853);
 
+        const bool isMoon = (config.presetName.find("Moon") != std::string::npos);
+
         data->m_rocks.reserve(static_cast<size_t>(config.numRocks));
-        for (int i = 0; i < config.numRocks; ++i) {
+        const int maxAttempts = config.numRocks * 16;
+        int attempts = 0;
+
+        while (static_cast<int>(data->m_rocks.size()) < config.numRocks && attempts < maxAttempts) {
+            ++attempts;
             const double rx = distPos(rockRng);
             const double rz = distPos(rockRng);
 
             // Safe radius around rover origin spawn (0, 0)
-            if (std::sqrt(rx * rx + rz * rz) < 10.0) {
+            if (std::sqrt(rx * rx + rz * rz) < 12.0) {
+                continue;
+            }
+
+            // Continuous spatial density field from multi-octave fBm noise
+            const double rawDensity = densityNoise.sampleFbm2D(rx, rz, 3, 0.012, 0.5, 2.0);
+            double clusterVal = (rawDensity + 1.0) * 0.5; // [0.0, 1.0]
+
+            // Geological impact crater rim ejecta clustering boost
+            for (const auto& crater : data->m_craters) {
+                const double dx = rx - crater.center.x;
+                const double dz = rz - crater.center.y;
+                const double dCrater = std::sqrt(dx * dx + dz * dz);
+                if (dCrater >= crater.radius * 0.85 && dCrater <= crater.radius + crater.rimWidth * 2.5) {
+                    clusterVal = std::min(1.0, clusterVal + 0.35);
+                    break;
+                }
+            }
+
+            // Acceptance probability based on spatial noise density
+            // Sparse plains (<0.28): 5% accept
+            // Moderate zones (0.28..0.65): 35% accept
+            // Dense boulder clusters (>=0.65): 85% accept
+            double acceptProb = 0.35;
+            if (clusterVal < 0.28) {
+                acceptProb = 0.05;
+            } else if (clusterVal >= 0.65) {
+                acceptProb = 0.85;
+            }
+
+            if (dist01(rockRng) > acceptProb) {
                 continue;
             }
 
             const double groundH = data->sampleHeight(rx, rz);
-            const double baseScale = distScale(rockRng);
-            const double sx = baseScale * distAspect(rockRng);
-            const double sy = baseScale * distAspect(rockRng) * 0.85; // Flatter basalt boulder profile
-            const double sz = baseScale * distAspect(rockRng);
+            const Vec3 groundNorm = data->sampleNormal(rx, rz);
 
-            RockObstacle rock;
-            // Place boulder embedded ~30% into the regolith for realistic contact stability
-            rock.position = Vec3{rx, groundH + sy * 0.70, rz};
-            rock.halfExtents = Vec3{sx, sy, sz};
-            rock.rotation = quatFromAxisAngle(Vec3{0.0, 1.0, 0.0}, distAngle(rockRng));
-
-            if (baseScale < 0.55) {
-                rock.type = RockObstacleType::SmallBasalt;
-            } else if (baseScale < 1.00) {
-                rock.type = RockObstacleType::MediumBoulder;
-            } else {
-                rock.type = RockObstacleType::LargeFormation;
+            // Exclude near-vertical cliffs where rocks cannot naturally sit stable
+            if (groundNorm.y < 0.60) {
+                continue;
             }
 
-            // Approximate mass: Volume * Basalt Density (2800 kg/m^3)
-            const double volume = 8.0 * sx * sy * sz;
+            // Natural size distribution:
+            // ~60% small basalt stones (R ~ 0.25 - 0.45m)
+            // ~28% medium boulders (R ~ 0.50 - 0.95m)
+            // ~12% large boulder formations (R ~ 1.10 - 1.85m)
+            const double sizeRoll = dist01(rockRng);
+            double baseRadius = 0.0;
+            RockObstacleType rockType = RockObstacleType::SmallBasalt;
+
+            if (sizeRoll < 0.60) {
+                baseRadius = std::uniform_real_distribution<double>(0.25, 0.45)(rockRng);
+                rockType = RockObstacleType::SmallBasalt;
+            } else if (sizeRoll < 0.88) {
+                baseRadius = std::uniform_real_distribution<double>(0.50, 0.95)(rockRng);
+                rockType = RockObstacleType::MediumBoulder;
+            } else {
+                baseRadius = std::uniform_real_distribution<double>(1.10, 1.85)(rockRng);
+                rockType = RockObstacleType::LargeFormation;
+            }
+
+            // Scale within user-configured rock size boundaries
+            const double scaleRange = std::max(0.1, config.maxRockSize - config.minRockSize);
+            baseRadius = config.minRockSize + (baseRadius / 1.85) * scaleRange;
+
+            // Natural irregular aspect ratio scaling
+            const double sx = baseRadius * std::uniform_real_distribution<double>(0.80, 1.25)(rockRng);
+            const double sy = baseRadius * std::uniform_real_distribution<double>(0.65, 0.85)(rockRng); // Weathered flatter profile
+            const double sz = baseRadius * std::uniform_real_distribution<double>(0.80, 1.25)(rockRng);
+            const double rEffective = std::max(sx, sz);
+
+            // Inter-rock clearance check: prevent overlapping / interpenetrating colliders
+            bool overlaps = false;
+            for (const auto& existing : data->m_rocks) {
+                const double d2 = (rx - existing.position.x) * (rx - existing.position.x) +
+                                  (rz - existing.position.z) * (rz - existing.position.z);
+                const double rMin = rEffective + std::max(existing.halfExtents.x, existing.halfExtents.z) + 0.35;
+                if (d2 < rMin * rMin) {
+                    overlaps = true;
+                    break;
+                }
+            }
+            if (overlaps) {
+                continue;
+            }
+
+            RockObstacle rock;
+            // Embed ~30% into the regolith for realistic contact stability (no floating, no excessive sinking)
+            rock.position = Vec3{rx, groundH + sy * 0.70, rz};
+            rock.halfExtents = Vec3{sx, sy, sz};
+            rock.type = rockType;
+
+            // Align rock up-axis with local terrain normal, plus random yaw around surface normal
+            const Vec3 axis = vec3Cross(Vec3{0.0, 1.0, 0.0}, groundNorm);
+            const double axisLen = vec3Length(axis);
+            const Quat alignQ = (axisLen > 1e-5)
+                ? quatFromAxisAngle(vec3Scale(axis, 1.0 / axisLen), std::acos(clamp(groundNorm.y, -1.0, 1.0)))
+                : quatIdentity();
+            const double yawAngle = distAngle(rockRng);
+            const Quat yawQ = quatFromAxisAngle(Vec3{0.0, 1.0, 0.0}, yawAngle);
+            rock.rotation = quatNormalize(quatMultiply(alignQ, yawQ));
+
+            // Unique procedural shape seed for faceted low-poly morphology
+            rock.variantSeed = static_cast<int>(rockRng() & 0x7FFFFFFF);
+
+            // Natural muted planetary rock colors
+            if (isMoon) {
+                const int colorVariant = static_cast<int>(rockRng() % 3);
+                if (colorVariant == 0) {
+                    rock.color = Color3{0.32f, 0.32f, 0.35f}; // Anorthosite grey
+                } else if (colorVariant == 1) {
+                    rock.color = Color3{0.25f, 0.25f, 0.27f}; // Dark lunar basalt
+                } else {
+                    rock.color = Color3{0.20f, 0.20f, 0.22f}; // Impact melt breccia
+                }
+            } else {
+                const int colorVariant = static_cast<int>(rockRng() % 4);
+                if (colorVariant == 0) {
+                    rock.color = Color3{0.28f, 0.16f, 0.12f}; // Muted reddish-brown
+                } else if (colorVariant == 1) {
+                    rock.color = Color3{0.32f, 0.18f, 0.14f}; // Dark rust
+                } else if (colorVariant == 2) {
+                    rock.color = Color3{0.22f, 0.18f, 0.16f}; // Brownish-grey
+                } else {
+                    rock.color = Color3{0.18f, 0.15f, 0.14f}; // Weathered dark basalt
+                }
+            }
+
+            // Approximate physical mass: Volume * Basalt Density (2800 kg/m^3) * convex fill factor
+            const double volume = 8.0 * sx * sy * sz * 0.65;
             rock.mass = volume * 2800.0;
 
             data->m_rocks.push_back(rock);
@@ -563,6 +675,15 @@ std::shared_ptr<ProceduralTerrainData> ProceduralTerrainGenerator::generate(cons
     }
 
     return data;
+}
+
+std::vector<Vec3> RockObstacle::getLocalVertices() const {
+    return Mesh::getLowPolyRockHullPoints(
+        static_cast<float>(halfExtents.x),
+        static_cast<float>(halfExtents.y),
+        static_cast<float>(halfExtents.z),
+        variantSeed
+    );
 }
 
 } // namespace torquelab

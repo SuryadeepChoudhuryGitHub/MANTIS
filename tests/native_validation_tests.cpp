@@ -2914,6 +2914,301 @@ void unitTest45_InteractiveMinimapCoordinateTransformations() {
     EXPECT_LT(cHigh.b, 0.2f);
 }
 
+void unitTest46_ProceduralRockGenerationClusteringAndHullVerification() {
+    // 1. Deterministic Placement & Seed Reproducibility
+    ProceduralTerrainConfig cfgA = ProceduralTerrainConfig::createMarsPreset(424242u);
+    cfgA.worldSize = 256.0;
+    cfgA.gridResolution = 256;
+    cfgA.numRocks = 40;
+
+    ProceduralTerrainConfig cfgB = cfgA;
+
+    auto dataA = ProceduralTerrainGenerator::generate(cfgA);
+    auto dataB = ProceduralTerrainGenerator::generate(cfgB);
+
+    EXPECT_EQ(dataA->getRocks().size(), dataB->getRocks().size());
+    EXPECT_GT(dataA->getRocks().size(), 0);
+
+    for (size_t i = 0; i < dataA->getRocks().size(); ++i) {
+        const auto& rA = dataA->getRocks()[i];
+        const auto& rB = dataB->getRocks()[i];
+        EXPECT_NEAR(rA.position.x, rB.position.x, 1e-6);
+        EXPECT_NEAR(rA.position.y, rB.position.y, 1e-6);
+        EXPECT_NEAR(rA.position.z, rB.position.z, 1e-6);
+        EXPECT_NEAR(rA.halfExtents.x, rB.halfExtents.x, 1e-6);
+        EXPECT_NEAR(rA.halfExtents.y, rB.halfExtents.y, 1e-6);
+        EXPECT_NEAR(rA.halfExtents.z, rB.halfExtents.z, 1e-6);
+        EXPECT_NEAR(rA.rotation.w, rB.rotation.w, 1e-6);
+        EXPECT_EQ(rA.variantSeed, rB.variantSeed);
+    }
+
+    // 2. Spatial Noise Clustering Check
+    PerlinNoise densityNoise(cfgA.seed + 104729);
+    int clusterZoneCount = 0;
+    for (const auto& r : dataA->getRocks()) {
+        const double rawD = densityNoise.sampleFbm2D(r.position.x, r.position.z, 3, 0.012, 0.5, 2.0);
+        const double cVal = (rawD + 1.0) * 0.5;
+        if (cVal >= 0.35) {
+            ++clusterZoneCount;
+        }
+    }
+    EXPECT_GT(clusterZoneCount, 0);
+
+    // 3. Faceted Convex Hull Geometry Verification
+    for (const auto& r : dataA->getRocks()) {
+        const auto verts = r.getLocalVertices();
+        EXPECT_EQ(verts.size(), 12); // Canonical 12-vertex perturbed icosahedron
+        for (const auto& v : verts) {
+            EXPECT_TRUE(isVec3Finite(v));
+        }
+
+        // 4. Terrain Conformity & Embedding (~30% embedded)
+        const double groundH = dataA->sampleHeight(r.position.x, r.position.z);
+        const double expectedY = groundH + r.halfExtents.y * 0.70;
+        EXPECT_NEAR(r.position.y, expectedY, 0.05);
+
+        // 5. Origin Safe Clearance (>12m from rover origin)
+        const double dOrigin = std::sqrt(r.position.x * r.position.x + r.position.z * r.position.z);
+        EXPECT_GE(dOrigin, 12.0);
+    }
+
+    // 6. Non-Overlapping Inter-Rock Clearance Check
+    const auto& rocks = dataA->getRocks();
+    for (size_t i = 0; i < rocks.size(); ++i) {
+        for (size_t j = i + 1; j < rocks.size(); ++j) {
+            const double dx = rocks[i].position.x - rocks[j].position.x;
+            const double dz = rocks[i].position.z - rocks[j].position.z;
+            const double dist = std::sqrt(dx * dx + dz * dz);
+            const double rI = std::max(rocks[i].halfExtents.x, rocks[i].halfExtents.z);
+            const double rJ = std::max(rocks[j].halfExtents.x, rocks[j].halfExtents.z);
+            EXPECT_GE(dist, rI + rJ + 0.30); // Valid clearance
+        }
+    }
+}
+
+void unitTest47_AutonomousPathfindingAcrossSevenScenarios() {
+    NavGridConfig navCfg{};
+    navCfg.worldSizeM = 128.0;
+    navCfg.cellSizeM = 1.0;
+    navCfg.maxTraversableSlopeRad = 0.4363; // 25 deg rollover limit
+    navCfg.roverFootprintRadiusM = 1.65;   // Perseverance circumscribed footprint
+    navCfg.weightObstacleProximity = 4.0;
+
+    AStarPlanner planner;
+
+    // SCENARIO 1: Sparse Rocks
+    {
+        ProceduralTerrainConfig cfg = ProceduralTerrainConfig::createScenarioA_FlatPlain(1001u);
+        cfg.worldSize = 128.0;
+        cfg.gridResolution = 128;
+        cfg.enableRocks = true;
+        cfg.numRocks = 15;
+        cfg.minRockSize = 0.4;
+        cfg.maxRockSize = 0.8;
+
+        ProceduralPlanetMap map("scen1_map", "Scenario 1 Map", "Sparse Rocks", cfg);
+        NavGrid grid(navCfg);
+        EXPECT_TRUE(grid.buildFromTerrain(map));
+
+        const Vec3 start{0.0, 0.0, 0.0};
+        const Vec3 goal{28.0, 0.0, 28.0};
+        PlanResult res = planner.plan(grid, start, goal);
+
+        EXPECT_TRUE(res.success);
+        EXPECT_GT(res.waypoints.size(), 1);
+        EXPECT_GT(res.totalDistanceM, 30.0);
+        EXPECT_LT(res.totalDistanceM, 55.0);
+
+        for (const auto& wp : res.waypoints) {
+            for (const auto& obs : grid.getObstacles()) {
+                const double d = std::sqrt((wp.positionWorld.x - obs.position.x) * (wp.positionWorld.x - obs.position.x) +
+                                           (wp.positionWorld.z - obs.position.z) * (wp.positionWorld.z - obs.position.z));
+                EXPECT_GE(d, obs.radius + navCfg.roverFootprintRadiusM - 0.25);
+            }
+        }
+    }
+
+    // SCENARIO 2: Moderate Rock Density
+    {
+        ProceduralTerrainConfig cfg = ProceduralTerrainConfig::createScenarioA_FlatPlain(2002u);
+        cfg.worldSize = 128.0;
+        cfg.gridResolution = 128;
+        cfg.enableRocks = true;
+        cfg.numRocks = 50;
+
+        ProceduralPlanetMap map("scen2_map", "Scenario 2 Map", "Moderate Rocks", cfg);
+        NavGrid grid(navCfg);
+        EXPECT_TRUE(grid.buildFromTerrain(map));
+
+        const Vec3 start{0.0, 0.0, 0.0};
+        const Vec3 goal{35.0, 0.0, 0.0};
+        PlanResult res = planner.plan(grid, start, goal);
+
+        EXPECT_TRUE(res.success);
+        EXPECT_GT(res.waypoints.size(), 1);
+        for (const auto& wp : res.waypoints) {
+            const NavNode* node = grid.getNodeAtWorld(wp.positionWorld.x, wp.positionWorld.z);
+            if (node) {
+                EXPECT_EQ(node->traversability, CellTraversability::Traversable);
+            }
+        }
+    }
+
+    // SCENARIO 3: Dense Rock Clusters
+    {
+        ProceduralTerrainConfig cfg = ProceduralTerrainConfig::createScenarioA_FlatPlain(3003u);
+        cfg.worldSize = 128.0;
+        cfg.gridResolution = 128;
+        cfg.enableRocks = false;
+
+        ProceduralPlanetMap map("scen3_map", "Scenario 3 Map", "Dense Clusters", cfg);
+        NavGrid grid(navCfg);
+        EXPECT_TRUE(grid.buildFromTerrain(map));
+
+        // Place a dense rock barrier across the direct path: X in [12..18], Z in [-6..+6]
+        grid.addObstacle(Vec3{15.0, 0.0, -4.0}, 1.2, true);
+        grid.addObstacle(Vec3{15.0, 0.0, -1.5}, 1.2, true);
+        grid.addObstacle(Vec3{15.0, 0.0,  1.5}, 1.2, true);
+        grid.addObstacle(Vec3{15.0, 0.0,  4.0}, 1.2, true);
+
+        const Vec3 start{0.0, 0.0, 0.0};
+        const Vec3 goal{30.0, 0.0, 0.0};
+        PlanResult res = planner.plan(grid, start, goal);
+
+        EXPECT_TRUE(res.success);
+        bool detoured = false;
+        for (const auto& wp : res.waypoints) {
+            if (wp.positionWorld.x >= 10.0 && wp.positionWorld.x <= 20.0) {
+                if (std::abs(wp.positionWorld.z) > 4.5) {
+                    detoured = true;
+                }
+            }
+        }
+        EXPECT_TRUE(detoured);
+    }
+
+    // SCENARIO 4: Large Boulders
+    {
+        ProceduralTerrainConfig cfg = ProceduralTerrainConfig::createScenarioA_FlatPlain(4004u);
+        cfg.worldSize = 128.0;
+        cfg.gridResolution = 128;
+        cfg.enableRocks = false;
+
+        ProceduralPlanetMap map("scen4_map", "Scenario 4 Map", "Large Boulders", cfg);
+        NavGrid grid(navCfg);
+        EXPECT_TRUE(grid.buildFromTerrain(map));
+
+        // Place a large boulder (radius 1.85m) directly on the straight path at (14, 0)
+        grid.addObstacle(Vec3{14.0, 0.0, 0.0}, 1.85, true);
+
+        const Vec3 start{0.0, 0.0, 0.0};
+        const Vec3 goal{28.0, 0.0, 0.0};
+        PlanResult res = planner.plan(grid, start, goal);
+
+        EXPECT_TRUE(res.success);
+        for (const auto& wp : res.waypoints) {
+            const double d = std::sqrt((wp.positionWorld.x - 14.0) * (wp.positionWorld.x - 14.0) +
+                                       (wp.positionWorld.z - 0.0) * (wp.positionWorld.z - 0.0));
+            EXPECT_GE(d, 1.85 + navCfg.roverFootprintRadiusM - 0.25);
+        }
+    }
+
+    // SCENARIO 5: Narrow Passages (Gaps narrower than rover footprint rejected)
+    {
+        ProceduralTerrainConfig cfg = ProceduralTerrainConfig::createScenarioA_FlatPlain(5005u);
+        cfg.worldSize = 128.0;
+        cfg.gridResolution = 128;
+        cfg.enableRocks = false;
+
+        ProceduralPlanetMap map("scen5_map", "Scenario 5 Map", "Narrow Passages", cfg);
+        NavGrid grid(navCfg);
+        EXPECT_TRUE(grid.buildFromTerrain(map));
+
+        // Two boulders at (16, +1.2) and (16, -1.2) with radius 0.5m
+        // Edge-to-edge gap is 2.4 - 1.0 = 1.4m (rover footprint is 3.30m)
+        grid.addObstacle(Vec3{16.0, 0.0,  1.2}, 0.5, true);
+        grid.addObstacle(Vec3{16.0, 0.0, -1.2}, 0.5, true);
+
+        const Vec3 start{5.0, 0.0, 0.0};
+        const Vec3 goal{26.0, 0.0, 0.0};
+        PlanResult res = planner.plan(grid, start, goal);
+
+        EXPECT_TRUE(res.success);
+        for (const auto& wp : res.waypoints) {
+            if (std::abs(wp.positionWorld.x - 16.0) < 1.0) {
+                EXPECT_GT(std::abs(wp.positionWorld.z), 1.6);
+            }
+        }
+    }
+
+    // SCENARIO 6: Unreachable Destination (Enclosed target gracefully detected)
+    {
+        ProceduralTerrainConfig cfg = ProceduralTerrainConfig::createScenarioA_FlatPlain(6006u);
+        cfg.worldSize = 128.0;
+        cfg.gridResolution = 128;
+        cfg.enableRocks = false;
+
+        ProceduralPlanetMap map("scen6_map", "Scenario 6 Map", "Unreachable Goal", cfg);
+        NavGrid grid(navCfg);
+        EXPECT_TRUE(grid.buildFromTerrain(map));
+
+        // Completely wall off a 6x6 enclosure around (20, 20) with solid boulders
+        for (double ox = 16.0; ox <= 24.0; ox += 1.5) {
+            grid.addObstacle(Vec3{ox, 0.0, 16.0}, 1.2, true);
+            grid.addObstacle(Vec3{ox, 0.0, 24.0}, 1.2, true);
+        }
+        for (double oz = 16.0; oz <= 24.0; oz += 1.5) {
+            grid.addObstacle(Vec3{16.0, 0.0, oz}, 1.2, true);
+            grid.addObstacle(Vec3{24.0, 0.0, oz}, 1.2, true);
+        }
+
+        const Vec3 start{0.0, 0.0, 0.0};
+        const Vec3 unreachableGoal{20.0, 0.0, 20.0};
+
+        PlanResult res = planner.plan(grid, start, unreachableGoal);
+        EXPECT_FALSE(res.success);
+        EXPECT_FALSE(res.failureReason.empty());
+
+        PathFollower follower;
+        follower.setPath(res.waypoints);
+        EXPECT_EQ(follower.getState(), NavState::Idle);
+    }
+
+    // SCENARIO 7: Dynamic Re-Planning During Movement
+    {
+        ProceduralTerrainConfig cfg = ProceduralTerrainConfig::createScenarioA_FlatPlain(7007u);
+        cfg.worldSize = 128.0;
+        cfg.gridResolution = 128;
+        cfg.enableRocks = false;
+
+        ProceduralPlanetMap map("scen7_map", "Scenario 7 Map", "Dynamic Replanning", cfg);
+        NavGrid grid(navCfg);
+        EXPECT_TRUE(grid.buildFromTerrain(map));
+
+        const Vec3 startPos{0.0, 0.0, 0.0};
+        const Vec3 initialGoal{30.0, 0.0, 0.0};
+        PlanResult initialPlan = planner.plan(grid, startPos, initialGoal);
+        EXPECT_TRUE(initialPlan.success);
+
+        PathFollower follower;
+        follower.setPath(initialPlan.waypoints);
+        follower.startNavigation();
+        EXPECT_EQ(follower.getState(), NavState::Navigating);
+
+        const Vec3 currentRoverPos{12.0, 0.0, 0.0};
+        const Vec3 newGoal{12.0, 0.0, 25.0};
+
+        PlanResult updatedPlan = planner.plan(grid, currentRoverPos, newGoal);
+        EXPECT_TRUE(updatedPlan.success);
+        EXPECT_GT(updatedPlan.waypoints.size(), 1);
+
+        follower.setPath(updatedPlan.waypoints);
+        EXPECT_EQ(follower.getState(), NavState::Navigating);
+        EXPECT_NEAR(follower.getWaypoints().front().positionWorld.x, 12.0, 1.0);
+        EXPECT_NEAR(follower.getWaypoints().back().positionWorld.z, 25.0, 1.0);
+    }
+}
+
 } // namespace
 
 namespace torquelab {
@@ -2975,6 +3270,8 @@ int runAllValidationTests() {
         {"Unit 43: A* Pathfinding Admissibility, Heuristic Optimality & Dijkstra Comparison", unitTest43_AStarPathfindingAdmissibilityAndDijkstraComparison},
         {"Unit 44: Autonomous Path-Following Controller, Waypoint Advancement & Speed Adaptation", unitTest44_AutonomousPathFollowerWaypointAdvancementAndSpeedAdaptation},
         {"Unit 45: Interactive Topographical Minimap Coordinate Transformations", unitTest45_InteractiveMinimapCoordinateTransformations},
+        {"Unit 46: Procedural Rock Generation, Spatial Noise Clustering & Hull Verification", unitTest46_ProceduralRockGenerationClusteringAndHullVerification},
+        {"Unit 47: Autonomous Pathfinding & Obstacle Avoidance Across 7 Mandatory Scenarios", unitTest47_AutonomousPathfindingAcrossSevenScenarios},
         {"Test A: Static Equilibrium on Flat Ground", validationTestA_StaticEquilibrium},
         {"Test B: Acceleration & Longitudinal Load Transfer (Rear Squat)", validationTestB_AccelerationAndSquat},
         {"Test C: Service Braking, Front Dive & Progressive Deceleration", validationTestC_BrakingAndDive},

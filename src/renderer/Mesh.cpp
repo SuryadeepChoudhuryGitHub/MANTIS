@@ -475,6 +475,155 @@ Mesh Mesh::createPneumaticTireMesh(
     return mesh;
 }
 
+namespace {
+
+inline uint32_t rockHash32(uint32_t a) {
+    a = (a ^ 61) ^ (a >> 16);
+    a = a + (a << 3);
+    a = a ^ (a >> 4);
+    a = a * 0x27d4eb2d;
+    a = a ^ (a >> 15);
+    return a;
+}
+
+inline double rockHashFloat(int seed, int index) {
+    const uint32_t h = rockHash32(static_cast<uint32_t>(seed * 1103515245 + index * 12345));
+    return static_cast<double>(h & 0xFFFF) / 65535.0;
+}
+
+} // namespace
+
+std::vector<Vec3> Mesh::getLowPolyRockHullPoints(float halfWidth, float halfHeight, float halfDepth, int variantSeed) {
+    constexpr double t = 1.618033988749895; // Golden ratio
+    const double rawVerts[12][3] = {
+        {-1.0,  t,   0.0}, { 1.0,  t,   0.0}, {-1.0, -t,   0.0}, { 1.0, -t,   0.0},
+        { 0.0, -1.0,  t }, { 0.0,  1.0,  t }, { 0.0, -1.0, -t }, { 0.0,  1.0, -t },
+        {  t,   0.0, -1.0}, {  t,   0.0,  1.0}, { -t,   0.0, -1.0}, { -t,   0.0,  1.0}
+    };
+
+    const int archetype = std::abs(variantSeed) % 5;
+    std::vector<Vec3> points(12);
+
+    for (int i = 0; i < 12; ++i) {
+        Vec3 v{rawVerts[i][0], rawVerts[i][1], rawVerts[i][2]};
+        v = vec3Normalize(v);
+
+        const double rnd = rockHashFloat(variantSeed, i);
+        double radialDisplacement = 0.78 + 0.44 * rnd; // [0.78, 1.22]
+
+        // Morphological archetypes
+        if (archetype == 0) {
+            // Angular basalt boulder: sharper peaks and asymmetric cleavage
+            if (v.y > 0.2) v.y *= 1.25;
+            if (v.x * v.z > 0.0) radialDisplacement *= 1.15;
+        } else if (archetype == 1) {
+            // Tabular basalt slab: flattened vertically, wider perimeter
+            v.y *= 0.55;
+            v.x *= 1.25;
+            v.z *= 1.25;
+        } else if (archetype == 2) {
+            // Wind-eroded martian ventifact: sharp keel ridge on one side, steep leeward slope
+            const double keel = (v.x + v.z) * 0.7071;
+            if (keel > 0.3) {
+                radialDisplacement *= 1.30;
+                v.y += 0.20;
+            } else if (keel < -0.3) {
+                radialDisplacement *= 0.80;
+            }
+        } else if (archetype == 3) {
+            // Weathered rounded basalt stone: gentler displacement
+            radialDisplacement = 0.88 + 0.24 * rnd;
+        } else {
+            // Fractured wedge rock: planar shear cut on negative X
+            if (v.x < -0.2) {
+                v.x = -0.2 + (v.x + 0.2) * 0.4;
+            } else {
+                radialDisplacement *= 1.18;
+            }
+        }
+
+        // Flatter underside for flush stable seating into regolith
+        if (v.y < 0.0) {
+            v.y *= 0.65;
+        }
+
+        points[i] = Vec3{
+            v.x * radialDisplacement * static_cast<double>(halfWidth),
+            v.y * radialDisplacement * static_cast<double>(halfHeight),
+            v.z * radialDisplacement * static_cast<double>(halfDepth)
+        };
+    }
+
+    return points;
+}
+
+Mesh Mesh::createLowPolyRock(float halfWidth, float halfHeight, float halfDepth, int variantSeed) {
+    const auto hull = getLowPolyRockHullPoints(halfWidth, halfHeight, halfDepth, variantSeed);
+
+    constexpr int faces[20][3] = {
+        {0, 11, 5}, {0, 5, 1}, {0, 1, 7}, {0, 7, 10}, {0, 10, 11},
+        {1, 5, 9}, {5, 11, 4}, {11, 10, 2}, {10, 7, 6}, {7, 1, 8},
+        {3, 9, 4}, {3, 4, 2}, {3, 2, 6}, {3, 6, 8}, {3, 8, 9},
+        {4, 9, 5}, {2, 4, 11}, {6, 2, 10}, {8, 6, 7}, {9, 8, 1}
+    };
+
+    std::vector<VertexPNTU> verts;
+    verts.reserve(60);
+    std::vector<unsigned int> indices;
+    indices.reserve(60);
+
+    for (int f = 0; f < 20; ++f) {
+        const Vec3& A = hull[static_cast<size_t>(faces[f][0])];
+        const Vec3& B = hull[static_cast<size_t>(faces[f][1])];
+        const Vec3& C = hull[static_cast<size_t>(faces[f][2])];
+
+        // Exact face normal for crisp faceted low-poly rock lighting
+        const Vec3 edge1 = vec3Sub(B, A);
+        const Vec3 edge2 = vec3Sub(C, A);
+        Vec3 faceNorm = vec3Cross(edge1, edge2);
+        const double nLen = vec3Length(faceNorm);
+        if (nLen > 1e-7) {
+            faceNorm = vec3Scale(faceNorm, 1.0 / nLen);
+        } else {
+            faceNorm = Vec3{0.0, 1.0, 0.0};
+        }
+
+        // Ensure outward pointing normal
+        const Vec3 centroid = vec3Scale(vec3Add(A, vec3Add(B, C)), 1.0 / 3.0);
+        if (vec3Dot(faceNorm, centroid) < 0.0) {
+            faceNorm = vec3Negate(faceNorm);
+        }
+
+        const float fnx = static_cast<float>(faceNorm.x);
+        const float fny = static_cast<float>(faceNorm.y);
+        const float fnz = static_cast<float>(faceNorm.z);
+
+        const unsigned int baseIdx = static_cast<unsigned int>(verts.size());
+
+        verts.push_back(VertexPNTU{
+            static_cast<float>(A.x), static_cast<float>(A.y), static_cast<float>(A.z),
+            fnx, fny, fnz, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f
+        });
+        verts.push_back(VertexPNTU{
+            static_cast<float>(B.x), static_cast<float>(B.y), static_cast<float>(B.z),
+            fnx, fny, fnz, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f
+        });
+        verts.push_back(VertexPNTU{
+            static_cast<float>(C.x), static_cast<float>(C.y), static_cast<float>(C.z),
+            fnx, fny, fnz, 1.0f, 0.0f, 0.0f, 1.0f, 0.5f, 1.0f
+        });
+
+        indices.push_back(baseIdx + 0);
+        indices.push_back(baseIdx + 1);
+        indices.push_back(baseIdx + 2);
+    }
+
+    computeTangents(verts, indices);
+    Mesh mesh;
+    mesh.upload(verts, indices);
+    return mesh;
+}
+
 Mesh Mesh::createTorusZ(float radius, float tubeRadius, int radialSegments, int tubularSegments) {
     std::vector<VertexPNU> verts;
     std::vector<unsigned int> indices;

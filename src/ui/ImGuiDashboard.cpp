@@ -1491,6 +1491,16 @@ void ImGuiDashboard::renderMinimapAndNavigationWindow(
         // Overlays
         drawList->PushClipRect(p0, p1, true);
 
+        // 0. Draw Rock & Boulder Obstacles on Minimap
+        for (const auto& obs : navGrid.getObstacles()) {
+            float ox, oy;
+            if (minimap.worldToScreen(obs.position, p0.x, p0.y, mapDim, mapDim, roverPos, ox, oy)) {
+                const float screenRadius = std::max(2.0f, static_cast<float>((obs.radius / span) * mapDim));
+                drawList->AddCircleFilled(ImVec2(ox, oy), screenRadius, IM_COL32(35, 25, 22, 210));
+                drawList->AddCircle(ImVec2(ox, oy), screenRadius, IM_COL32(75, 45, 35, 230), 12, 1.0f);
+            }
+        }
+
         // 1. Draw Planned Path Waypoints and connecting polyline
         const auto& waypoints = pathFollower.getWaypoints();
         if (waypoints.size() >= 2) {

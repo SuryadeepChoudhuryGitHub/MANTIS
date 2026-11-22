@@ -42,6 +42,8 @@ public:
     static Mesh createSphere(float radius, int rings = 14, int sectors = 18);
     static Mesh createPlaneXZ(float width, float depth);
     static Mesh createRingXZ(float innerRadius, float outerRadius, int segments = 64);
+    static Mesh createLowPolyRock(float halfWidth, float halfHeight, float halfDepth, int variantSeed = 0);
+    static std::vector<Vec3> getLowPolyRockHullPoints(float halfWidth, float halfHeight, float halfDepth, int variantSeed = 0);
 
 private:
     void release();

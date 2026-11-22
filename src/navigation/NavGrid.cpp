@@ -64,6 +64,7 @@ bool NavGrid::buildFromTerrain(const ITerrainMap& terrainMap) {
     m_width = static_cast<int>(std::round(m_config.worldSizeM / m_config.cellSizeM));
     m_height = m_width;
     m_nodes.resize(static_cast<size_t>(m_width * m_height));
+    m_obstacles.clear();
 
     const double halfSize = m_config.worldSizeM * 0.5;
 
@@ -136,6 +137,8 @@ bool NavGrid::buildFromTerrain(const ITerrainMap& terrainMap) {
     if (procMap && procMap->getData()) {
         for (const auto& rock : procMap->getData()->getRocks()) {
             const double rRadius = std::max(rock.halfExtents.x, rock.halfExtents.z);
+            m_obstacles.push_back(NavObstacleInfo{rock.position, rRadius, true});
+
             int minGx = 0, minGz = 0, maxGx = 0, maxGz = 0;
             worldToGrid(rock.position.x - rRadius, rock.position.z - rRadius, minGx, minGz);
             worldToGrid(rock.position.x + rRadius, rock.position.z + rRadius, maxGx, maxGz);
@@ -240,6 +243,31 @@ void NavGrid::computeObstacleDistanceTransform() {
                 m_config.weightObstacleProximity * obsProximityCost;
         }
     }
+}
+
+void NavGrid::addObstacle(const Vec3& pos, double radius, bool isRock) {
+    m_obstacles.push_back(NavObstacleInfo{pos, radius, isRock});
+    int minGx = 0, minGz = 0, maxGx = 0, maxGz = 0;
+    worldToGrid(pos.x - radius, pos.z - radius, minGx, minGz);
+    worldToGrid(pos.x + radius, pos.z + radius, maxGx, maxGz);
+
+    for (int rz = minGz; rz <= maxGz; ++rz) {
+        for (int rx = minGx; rx <= maxGx; ++rx) {
+            NavNode* rNode = const_cast<NavNode*>(getNode(rx, rz));
+            if (!rNode) continue;
+            const double d2 = (rNode->worldPosition.x - pos.x) * (rNode->worldPosition.x - pos.x) +
+                              (rNode->worldPosition.z - pos.z) * (rNode->worldPosition.z - pos.z);
+            if (d2 <= radius * radius) {
+                rNode->traversability = CellTraversability::NonTraversable_ObstacleCollision;
+                rNode->costMultiplier = 1e6;
+            }
+        }
+    }
+    computeObstacleDistanceTransform();
+}
+
+void NavGrid::clearObstacles() {
+    m_obstacles.clear();
 }
 
 bool NavGrid::isFootprintSafe(double worldX, double worldZ, double headingRad) const {

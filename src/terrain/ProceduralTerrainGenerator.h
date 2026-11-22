@@ -99,6 +99,10 @@ struct RockObstacle {
     RockObstacleType type{RockObstacleType::MediumBoulder};
     double mass{850.0};               // Density ~ 2800 kg/m^3 (basalt/anorthosite)
     int colliderHandle{-1};           // Bullet collision shape handle
+    int variantSeed{0};               // Procedural geometry shape seed
+    Color3 color{0.25f, 0.16f, 0.12f};// Dark muted basalt / rust rock tint
+
+    std::vector<Vec3> getLocalVertices() const;
 };
 
 // ============================================================================

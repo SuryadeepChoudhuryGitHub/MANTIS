@@ -96,6 +96,10 @@ inline constexpr Vec3 vec3Scale(const Vec3& v, double s) {
     return Vec3{v.x * s, v.y * s, v.z * s};
 }
 
+inline constexpr Vec3 vec3Negate(const Vec3& v) {
+    return Vec3{-v.x, -v.y, -v.z};
+}
+
 inline constexpr double vec3Dot(const Vec3& a, const Vec3& b) {
     return a.x * b.x + a.y * b.y + a.z * b.z;
 }

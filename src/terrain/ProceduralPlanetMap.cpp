@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
-#include <BulletCollision/CollisionShapes/btBoxShape.h>
+#include <BulletCollision/CollisionShapes/btConvexHullShape.h>
 #include <BulletCollision/CollisionShapes/btHeightfieldTerrainShape.h>
 #include "physics/PhysicsWorld.h"
 #include "renderer/TrackRendererGL.h"
@@ -79,16 +79,22 @@ bool ProceduralPlanetMap::buildPhysics(PhysicsWorld& world) {
     );
     m_colliderHandles.push_back(hfHandle);
 
-    // 2. Build Solid Collision Rigid Bodies for Scattered Rocks & Boulders
+    // 2. Build Solid Collision Rigid Bodies for Scattered Rocks & Boulders (1:1 Matching Convex Hulls)
     for (const auto& rock : m_data->getRocks()) {
-        auto boxShape = std::make_unique<btBoxShape>(btVector3(
-            static_cast<btScalar>(rock.halfExtents.x),
-            static_cast<btScalar>(rock.halfExtents.y),
-            static_cast<btScalar>(rock.halfExtents.z)
-        ));
+        auto hullShape = std::make_unique<btConvexHullShape>();
+        const auto localVerts = rock.getLocalVertices();
+        for (const auto& v : localVerts) {
+            hullShape->addPoint(btVector3(
+                static_cast<btScalar>(v.x),
+                static_cast<btScalar>(v.y),
+                static_cast<btScalar>(v.z)
+            ), false);
+        }
+        hullShape->recalcLocalAabb();
+        hullShape->setMargin(static_cast<btScalar>(0.01)); // 10 mm skin margin for exact physical contact
 
         const int rockHandle = world.addStaticCollider(
-            std::move(boxShape),
+            std::move(hullShape),
             rock.position,
             rock.rotation,
             SurfaceType::DryAsphalt, // High-friction solid rock
@@ -212,19 +218,20 @@ bool ProceduralPlanetMap::buildGraphics(TrackRendererGL& renderer) {
         }
     }
 
-    // 3. Render Solid Rock Obstacles
+    // 3. Render Solid Rock Obstacles with Faceted Low-Poly Geometry
     for (const auto& rock : m_data->getRocks()) {
         TrackRendererGL::RenderableTrackItem item;
-        item.mesh = Mesh::createBox(
-            static_cast<float>(rock.halfExtents.x * 2.0),
-            static_cast<float>(rock.halfExtents.y * 2.0),
-            static_cast<float>(rock.halfExtents.z * 2.0)
+        item.mesh = Mesh::createLowPolyRock(
+            static_cast<float>(rock.halfExtents.x),
+            static_cast<float>(rock.halfExtents.y),
+            static_cast<float>(rock.halfExtents.z),
+            rock.variantSeed
         );
         item.modelMatrix = Mat4::fromTRS(rock.position, rock.rotation);
         item.material = rockMat;
-        item.material.baseColor = (m_config.presetName.find("Moon") != std::string::npos)
-            ? Color3{0.35f, 0.35f, 0.38f}  // Anorthosite / lunar basalt
-            : Color3{0.25f, 0.18f, 0.15f}; // Dark martian basalt
+        item.material.baseColor = rock.color;
+        item.material.roughness = 0.88f;
+        item.material.metalness = 0.05f;
         item.material.receiveShadows = true;
         item.material.castShadows = true;
         renderer.addRenderableItem(std::move(item));

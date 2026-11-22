@@ -41,6 +41,12 @@ struct NavNode {
     double costMultiplier{1.0};      // Traversability cost weight >= 1.0
 };
 
+struct NavObstacleInfo {
+    Vec3 position{0.0, 0.0, 0.0};
+    double radius{1.0};
+    bool isRock{true};
+};
+
 struct NavGridConfig {
     double cellSizeM{1.0};           // Metric spatial resolution (1.0m per grid cell)
     double worldSizeM{512.0};        // Total world dimension covered by grid
@@ -83,6 +89,11 @@ public:
     const NavNode* getNode(int gridX, int gridZ) const;
     const NavNode* getNodeAtWorld(double worldX, double worldZ) const;
 
+    /** Returns all registered solid obstacles */
+    const std::vector<NavObstacleInfo>& getObstacles() const { return m_obstacles; }
+    void addObstacle(const Vec3& pos, double radius, bool isRock = true);
+    void clearObstacles();
+
     /** Checks if a specific world position is safe and traversable */
     bool isTraversable(double worldX, double worldZ) const;
 
@@ -102,6 +113,7 @@ private:
     int m_width{512};
     int m_height{512};
     std::vector<NavNode> m_nodes;
+    std::vector<NavObstacleInfo> m_obstacles;
 };
 
 } // namespace torquelab
