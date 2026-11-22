@@ -53,6 +53,8 @@ struct DashboardCallbacks {
     std::function<void()> onStopNav;
     std::function<void()> onClearDestination;
     std::function<void(uint32_t)> onRegenerateProceduralTerrain;
+    std::function<void(const Vec3&, double)> onAddWorldObstacle;
+    std::function<void()> onClearWorldObstacles;
 };
 
 class ImGuiDashboard {
@@ -87,7 +89,7 @@ public:
         const TerrainManager* terrainManager = nullptr,
         MinimapRenderer* minimapRenderer = nullptr,
         PathFollower* pathFollower = nullptr,
-        const NavGrid* navGrid = nullptr,
+        NavGrid* navGrid = nullptr,
         AStarPlanner* planner = nullptr,
         Vec3* selectedDestination = nullptr,
         bool* hasDestination = nullptr
@@ -106,6 +108,12 @@ public:
     bool telemetryEnabled{true};
     bool minimapEnabled{true};
     bool navigationPanelEnabled{true};
+
+    enum class MinimapPathColorMode {
+        BrightRed,  // Mission High-Vis Neon Crimson / Bright Red (Default)
+        DarkBlue    // Deep Royal Navy Blue
+    };
+    MinimapPathColorMode minimapPathColor{MinimapPathColorMode::BrightRed};
 
 private:
     std::vector<VehicleOption> m_availableVehicles;
@@ -151,7 +159,7 @@ private:
         VehicleDynamics& vehicle,
         MinimapRenderer& minimap,
         PathFollower& pathFollower,
-        const NavGrid& navGrid,
+        NavGrid& navGrid,
         AStarPlanner& planner,
         Vec3& selectedDestination,
         bool& hasDestination,

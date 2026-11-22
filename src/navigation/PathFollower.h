@@ -33,9 +33,9 @@ enum class NavState {
 };
 
 struct PathFollowerConfig {
-    double lookaheadDistanceM{2.2};      // Pure pursuit lookahead distance (m)
+    double lookaheadDistanceM{1.6};      // Pure pursuit lookahead distance (m) (tightened to prevent corner-cutting)
     double arrivalThresholdM{0.85};      // Distance to final waypoint to declare arrival (m)
-    double waypointAdvanceRadiusM{1.5};  // Distance to advance to next intermediate waypoint (m)
+    double waypointAdvanceRadiusM{0.85};  // Distance to advance to next intermediate waypoint (m)
     double cruiseSpeedMPerSec{1.02};     // Maximum autonomous exploration speed (~3.7 km/h)
     double steerKp{1.8};                 // Steering proportional gain
     double steerKd{0.25};                // Steering derivative damping gain

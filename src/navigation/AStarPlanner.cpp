@@ -243,7 +243,7 @@ std::vector<PathWaypoint> AStarPlanner::smoothPath(
 
     size_t i = 0;
     while (i < rawPath.size() - 1) {
-        // Look as far ahead as possible
+        // Look as far ahead as possible with verified obstacle and footprint clearance
         size_t bestNext = i + 1;
         for (size_t j = rawPath.size() - 1; j > i + 1; --j) {
             if (isLineOfSightClear(grid, rawPath[i].positionWorld, rawPath[j].positionWorld)) {

@@ -101,7 +101,7 @@ private:
     void rebuildTexture();
     Color3 computeTexturedColor(double wx, double wz, double elevation, const Vec3& normal, SurfaceType mat) const;
 
-    int m_texResolution{512};
+    int m_texResolution{1024}; // High-DPI 1024x1024 for crisp large presentation rendering
     MinimapDisplayMode m_displayMode{MinimapDisplayMode::ElevationHeatmap};
     MinimapViewport m_viewport;
 

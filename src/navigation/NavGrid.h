@@ -52,7 +52,7 @@ struct NavGridConfig {
     double worldSizeM{512.0};        // Total world dimension covered by grid
 
     // Perseverance Rover Footprint & Mechanical Limits
-    double roverFootprintRadiusM{1.65};  // Circumscribed radius for 2.65m track x 2.26m wheelbase
+    double roverFootprintRadiusM{2.00};  // Circumscribed radius for 2.65m track x 2.26m wheelbase (outer wheel envelope 1.94m + margin)
     double maxTraversableSlopeRad{0.4363}; // 25.0 degrees maximum safe incline (rollover limit)
     double maxStepHeightM{0.26};         // Wheel radius is 0.2625m, clearance is 0.35m
 

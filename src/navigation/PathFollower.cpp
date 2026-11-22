@@ -275,11 +275,13 @@ bool PathFollower::update(
     m_telemetry.commandedBrake = commandedBrake;
 
     // 10. Stuck / Wheel Slip Detection
-    if (commandedThrottle > 0.60 && roverSpeed < 0.04) {
+    if (commandedThrottle > 0.50 && roverSpeed < 0.05) {
         m_stuckTimer += dt;
         if (m_stuckTimer >= m_config.stuckTimeoutSec) {
             m_telemetry.state = NavState::Stuck;
             m_telemetry.isReplanRequested = true;
+            commandedThrottle = 0.0;
+            commandedBrake = 0.8;
         }
     } else {
         m_stuckTimer = std::max(0.0, m_stuckTimer - dt * 2.0);

@@ -625,8 +625,8 @@ std::shared_ptr<ProceduralTerrainData> ProceduralTerrainGenerator::generate(cons
             }
 
             RockObstacle rock;
-            // Embed ~30% into the regolith for realistic contact stability (no floating, no excessive sinking)
-            rock.position = Vec3{rx, groundH + sy * 0.70, rz};
+            // Embed ~25-30% into the regolith for realistic contact stability (no floating, no excessive sinking)
+            rock.position = Vec3{rx, groundH + sy * 0.25, rz};
             rock.halfExtents = Vec3{sx, sy, sz};
             rock.type = rockType;
 

@@ -573,25 +573,29 @@ Mesh Mesh::createLowPolyRock(float halfWidth, float halfHeight, float halfDepth,
     indices.reserve(60);
 
     for (int f = 0; f < 20; ++f) {
-        const Vec3& A = hull[static_cast<size_t>(faces[f][0])];
-        const Vec3& B = hull[static_cast<size_t>(faces[f][1])];
-        const Vec3& C = hull[static_cast<size_t>(faces[f][2])];
+        Vec3 vA = hull[static_cast<size_t>(faces[f][0])];
+        Vec3 vB = hull[static_cast<size_t>(faces[f][1])];
+        Vec3 vC = hull[static_cast<size_t>(faces[f][2])];
 
         // Exact face normal for crisp faceted low-poly rock lighting
-        const Vec3 edge1 = vec3Sub(B, A);
-        const Vec3 edge2 = vec3Sub(C, A);
+        Vec3 edge1 = vec3Sub(vB, vA);
+        Vec3 edge2 = vec3Sub(vC, vA);
         Vec3 faceNorm = vec3Cross(edge1, edge2);
+
+        // Ensure outward pointing normal and strictly CCW winding from outside
+        const Vec3 centroid = vec3Scale(vec3Add(vA, vec3Add(vB, vC)), 1.0 / 3.0);
+        if (vec3Dot(faceNorm, centroid) < 0.0) {
+            std::swap(vB, vC);
+            edge1 = vec3Sub(vB, vA);
+            edge2 = vec3Sub(vC, vA);
+            faceNorm = vec3Cross(edge1, edge2);
+        }
+
         const double nLen = vec3Length(faceNorm);
         if (nLen > 1e-7) {
             faceNorm = vec3Scale(faceNorm, 1.0 / nLen);
         } else {
             faceNorm = Vec3{0.0, 1.0, 0.0};
-        }
-
-        // Ensure outward pointing normal
-        const Vec3 centroid = vec3Scale(vec3Add(A, vec3Add(B, C)), 1.0 / 3.0);
-        if (vec3Dot(faceNorm, centroid) < 0.0) {
-            faceNorm = vec3Negate(faceNorm);
         }
 
         const float fnx = static_cast<float>(faceNorm.x);
@@ -601,15 +605,15 @@ Mesh Mesh::createLowPolyRock(float halfWidth, float halfHeight, float halfDepth,
         const unsigned int baseIdx = static_cast<unsigned int>(verts.size());
 
         verts.push_back(VertexPNTU{
-            static_cast<float>(A.x), static_cast<float>(A.y), static_cast<float>(A.z),
+            static_cast<float>(vA.x), static_cast<float>(vA.y), static_cast<float>(vA.z),
             fnx, fny, fnz, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f
         });
         verts.push_back(VertexPNTU{
-            static_cast<float>(B.x), static_cast<float>(B.y), static_cast<float>(B.z),
+            static_cast<float>(vB.x), static_cast<float>(vB.y), static_cast<float>(vB.z),
             fnx, fny, fnz, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f
         });
         verts.push_back(VertexPNTU{
-            static_cast<float>(C.x), static_cast<float>(C.y), static_cast<float>(C.z),
+            static_cast<float>(vC.x), static_cast<float>(vC.y), static_cast<float>(vC.z),
             fnx, fny, fnz, 1.0f, 0.0f, 0.0f, 1.0f, 0.5f, 1.0f
         });
 

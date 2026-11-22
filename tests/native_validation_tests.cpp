@@ -2962,9 +2962,9 @@ void unitTest46_ProceduralRockGenerationClusteringAndHullVerification() {
             EXPECT_TRUE(isVec3Finite(v));
         }
 
-        // 4. Terrain Conformity & Embedding (~30% embedded)
+        // 4. Terrain Conformity & Embedding (~25-30% embedded)
         const double groundH = dataA->sampleHeight(r.position.x, r.position.z);
-        const double expectedY = groundH + r.halfExtents.y * 0.70;
+        const double expectedY = groundH + r.halfExtents.y * 0.25;
         EXPECT_NEAR(r.position.y, expectedY, 0.05);
 
         // 5. Origin Safe Clearance (>12m from rover origin)
@@ -3209,6 +3209,130 @@ void unitTest47_AutonomousPathfindingAcrossSevenScenarios() {
     }
 }
 
+void unitTest48_WorldMapObstacleNavigationPipeline() {
+    // Test 8: World Map Obstacle Placement & Closed-Loop Physical Avoidance
+    ProceduralTerrainConfig cfg = ProceduralTerrainConfig::createScenarioA_FlatPlain(8888u);
+    cfg.worldSize = 128.0;
+    cfg.gridResolution = 128;
+    cfg.enableRocks = false;
+
+    ProceduralPlanetMap map("scen8_map", "Scenario 8 Map", "World Map Placement", cfg);
+    NavGridConfig navCfg{};
+    navCfg.roverFootprintRadiusM = 2.00;
+    navCfg.cellSizeM = 1.0;
+    navCfg.worldSizeM = 128.0;
+
+    NavGrid grid(navCfg);
+    EXPECT_TRUE(grid.buildFromTerrain(map));
+
+    // 1. Simulate User Placing Dynamic Obstacle on World Map / Minimap directly in path
+    const Vec3 startPos{0.0, 0.0, 0.0};
+    const Vec3 goalPos{24.0, 0.0, 0.0};
+    const Vec3 obstaclePos{12.0, 0.0, 0.0};
+    const double obstacleRadius = 1.40;
+
+    grid.addObstacle(obstaclePos, obstacleRadius, true);
+    EXPECT_EQ(grid.getObstacles().size(), 1);
+    EXPECT_NEAR(grid.getObstacles()[0].position.x, 12.0, 0.01);
+    EXPECT_NEAR(grid.getObstacles()[0].radius, 1.40, 0.01);
+
+    // Verify cell containing obstacle center is marked non-traversable
+    const NavNode* obsNode = grid.getNodeAtWorld(obstaclePos.x, obstaclePos.z);
+    EXPECT_TRUE(obsNode != nullptr);
+    if (obsNode) {
+        EXPECT_EQ(obsNode->traversability, CellTraversability::NonTraversable_ObstacleCollision);
+    }
+
+    // 2. Plan route around dynamically placed obstacle
+    PlannerConfig plannerCfg{};
+    plannerCfg.enableSmoothing = true;
+    AStarPlanner planner(plannerCfg);
+    PlanResult planRes = planner.plan(grid, startPos, goalPos);
+
+    EXPECT_TRUE(planRes.success);
+    EXPECT_GT(planRes.waypoints.size(), 2);
+
+    // Verify all waypoints maintain full rover footprint buffer from obstacle
+    bool detourDetected = false;
+    for (const auto& wp : planRes.waypoints) {
+        std::cout << "  [Unit48 WP] (" << wp.positionWorld.x << ", " << wp.positionWorld.z << ")\n";
+        const double d = std::sqrt(
+            (wp.positionWorld.x - obstaclePos.x) * (wp.positionWorld.x - obstaclePos.x) +
+            (wp.positionWorld.z - obstaclePos.z) * (wp.positionWorld.z - obstaclePos.z)
+        );
+        EXPECT_GE(d, obstacleRadius + navCfg.roverFootprintRadiusM - 0.25);
+        if (std::abs(wp.positionWorld.z) > 1.5) {
+            detourDetected = true;
+        }
+    }
+    EXPECT_TRUE(detourDetected);
+
+    // 3. Closed-loop Path Follower Execution
+    PathFollowerConfig followCfg{};
+    followCfg.lookaheadDistanceM = 1.6;
+    followCfg.waypointAdvanceRadiusM = 0.85;
+    followCfg.arrivalThresholdM = 0.85;
+
+    PathFollower follower(followCfg);
+    follower.setPath(planRes.waypoints);
+    follower.startNavigation();
+    EXPECT_EQ(follower.getState(), NavState::Navigating);
+
+    // 4. Physics simulation with NASA Perseverance rover
+    VehicleConfig roverCfg = createMarsRoverConfig();
+    PhysicsWorld world(roverCfg, false);
+    map.buildPhysics(world);
+
+    // Add Bullet rigid body convex hull collider for the obstacle
+    auto hullShape = std::make_unique<btConvexHullShape>();
+    const auto pts = Mesh::getLowPolyRockHullPoints(
+        static_cast<float>(obstacleRadius),
+        static_cast<float>(obstacleRadius * 0.75),
+        static_cast<float>(obstacleRadius),
+        42
+    );
+    for (const auto& p : pts) {
+        hullShape->addPoint(btVector3(
+            static_cast<btScalar>(p.x),
+            static_cast<btScalar>(p.y),
+            static_cast<btScalar>(p.z)
+        ), false);
+    }
+    hullShape->recalcLocalAabb();
+    hullShape->setMargin(static_cast<btScalar>(0.01));
+    world.addStaticCollider(std::move(hullShape), obstaclePos, quatIdentity(), SurfaceType::DryAsphalt, false);
+
+    // Settle rover onto terrain
+    for (int i = 0; i < 40; ++i) {
+        world.stepFixed();
+    }
+
+    // Step navigation controller and physics for 720 fixed frames (6.0s of physical simulation)
+    const double dt = 1.0 / 120.0;
+    double minObsDist = 999.0;
+    for (int step = 0; step < 720; ++step) {
+        follower.update(dt, *world.vehicle, false);
+        world.stepFixed();
+
+        const Vec3 curPos = world.vehicle->body.getPosition();
+        const double dToObs = std::sqrt(
+            (curPos.x - obstaclePos.x) * (curPos.x - obstaclePos.x) +
+            (curPos.z - obstaclePos.z) * (curPos.z - obstaclePos.z)
+        );
+        if (dToObs < minObsDist) {
+            minObsDist = dToObs;
+        }
+
+        // Rover must NEVER penetrate the solid obstacle radius
+        EXPECT_GE(dToObs, obstacleRadius + 0.15);
+    }
+
+    // Verify rover successfully made progress and maintained obstacle clearance
+    const Vec3 finalPos = world.vehicle->body.getPosition();
+    EXPECT_GT(finalPos.x, 2.5);
+    EXPECT_GE(minObsDist, obstacleRadius + 0.20);
+}
+
 } // namespace
 
 namespace torquelab {
@@ -3272,6 +3396,7 @@ int runAllValidationTests() {
         {"Unit 45: Interactive Topographical Minimap Coordinate Transformations", unitTest45_InteractiveMinimapCoordinateTransformations},
         {"Unit 46: Procedural Rock Generation, Spatial Noise Clustering & Hull Verification", unitTest46_ProceduralRockGenerationClusteringAndHullVerification},
         {"Unit 47: Autonomous Pathfinding & Obstacle Avoidance Across 7 Mandatory Scenarios", unitTest47_AutonomousPathfindingAcrossSevenScenarios},
+        {"Unit 48: World Map Obstacle Navigation Pipeline & Dynamic Avoidance", unitTest48_WorldMapObstacleNavigationPipeline},
         {"Test A: Static Equilibrium on Flat Ground", validationTestA_StaticEquilibrium},
         {"Test B: Acceleration & Longitudinal Load Transfer (Rear Squat)", validationTestB_AccelerationAndSquat},
         {"Test C: Service Braking, Front Dive & Progressive Deceleration", validationTestC_BrakingAndDive},

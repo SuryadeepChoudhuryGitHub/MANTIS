@@ -103,6 +103,7 @@ bool ProceduralPlanetMap::buildPhysics(PhysicsWorld& world) {
         m_colliderHandles.push_back(rockHandle);
     }
 
+    std::cout << "[ProceduralPlanetMap] Built " << m_colliderHandles.size() << " rock colliders in PhysicsWorld." << std::endl;
     return true;
 }
 
@@ -126,7 +127,13 @@ bool ProceduralPlanetMap::buildGraphics(TrackRendererGL& renderer) {
     const int step = 1; // Full 1m vertex mesh resolution
 
     const MaterialProps surfaceMat = renderer.getSurfaceMaterial(m_config.defaultSurface);
-    const MaterialProps rockMat = renderer.getSurfaceMaterial(SurfaceType::DryAsphalt);
+    MaterialProps rockMat{};
+    rockMat.textureId = 0;
+    rockMat.roughness = 0.88f;
+    rockMat.metalness = 0.04f;
+    rockMat.doubleSided = true;
+    rockMat.castShadows = true;
+    rockMat.receiveShadows = true;
 
     for (int cz = 0; cz < numChunksZ; ++cz) {
         const int rStart = cz * samplesPerChunkZ;
@@ -230,12 +237,15 @@ bool ProceduralPlanetMap::buildGraphics(TrackRendererGL& renderer) {
         item.modelMatrix = Mat4::fromTRS(rock.position, rock.rotation);
         item.material = rockMat;
         item.material.baseColor = rock.color;
+        item.material.textureId = 0;
+        item.material.doubleSided = true;
         item.material.roughness = 0.88f;
-        item.material.metalness = 0.05f;
+        item.material.metalness = 0.04f;
         item.material.receiveShadows = true;
         item.material.castShadows = true;
         renderer.addRenderableItem(std::move(item));
     }
+    std::cout << "[ProceduralPlanetMap] Built " << m_data->getRocks().size() << " visual rock obstacle meshes." << std::endl;
 
     // 4. Perimeter Horizon Skirt
     const auto env = getEnvironment();

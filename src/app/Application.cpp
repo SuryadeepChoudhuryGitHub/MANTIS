@@ -7,6 +7,7 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include "physics/VehicleCollisionGenerator.h"
+#include "terrain/ProceduralPlanetMap.h"
 #include "vehicle/Drivetrain.h"
 
 namespace torquelab {
@@ -123,8 +124,8 @@ bool Application::init(int width, int height, bool visible) {
         m_physicsWorld->stepFixed();
     }
 
-    // Initialize with primary Mars Jezero Crater exploration site
-    m_terrainManager.switchMap("mars_jezero_alpha", *m_physicsWorld, &m_trackRenderer, &m_skyRenderer);
+    // Initialize with primary Mars procedural planetary terrain site with rocks & craters
+    m_terrainManager.switchMap("procedural_mars", *m_physicsWorld, &m_trackRenderer, &m_skyRenderer);
     if (auto activeMap = m_terrainManager.getActiveMap()) {
         m_navGrid.buildFromTerrain(*activeMap);
         m_minimapRenderer.updateTerrain(*activeMap);
@@ -258,6 +259,101 @@ bool Application::init(int width, int height, bool visible) {
         [this](bool enable) {
             if (m_physicsWorld && m_physicsWorld->vehicle) {
                 m_physicsWorld->vehicle->config.enableStationaryHold = enable;
+            }
+        },
+        [this](const Vec3& dest) {
+            m_selectedDestination = dest;
+            m_hasDestination = true;
+            const Vec3 roverPos = m_physicsWorld->vehicle->body.getPosition();
+            PlanResult res = m_planner.plan(m_navGrid, roverPos, m_selectedDestination);
+            if (res.success) {
+                m_pathFollower.setPath(res.waypoints);
+                m_pathFollower.startNavigation();
+            }
+        },
+        [this]() { m_pathFollower.startNavigation(); },
+        [this]() { m_pathFollower.pauseNavigation(true); },
+        [this]() { m_pathFollower.resumeNavigation(); },
+        [this]() { m_pathFollower.emergencyStop(); },
+        [this]() {
+            m_pathFollower.clearPath();
+            m_hasDestination = false;
+        },
+        [this](uint32_t seed) {
+            if (auto pMap = std::dynamic_pointer_cast<ProceduralPlanetMap>(m_terrainManager.getActiveMap())) {
+                ProceduralTerrainConfig cfg = pMap->getConfig();
+                cfg.seed = seed;
+                pMap->regenerate(cfg);
+                m_terrainManager.switchMap(pMap->getId(), *m_physicsWorld, &m_trackRenderer, &m_skyRenderer);
+                m_navGrid.buildFromTerrain(*pMap);
+                m_minimapRenderer.updateTerrain(*pMap);
+            }
+        },
+        [this](const Vec3& pos, double radius) {
+            // Add Bullet static convex hull collider
+            auto hullShape = std::make_unique<btConvexHullShape>();
+            const auto pts = Mesh::getLowPolyRockHullPoints(
+                static_cast<float>(radius),
+                static_cast<float>(radius * 0.75),
+                static_cast<float>(radius),
+                42
+            );
+            for (const auto& p : pts) {
+                hullShape->addPoint(btVector3(
+                    static_cast<btScalar>(p.x),
+                    static_cast<btScalar>(p.y),
+                    static_cast<btScalar>(p.z)
+                ), false);
+            }
+            hullShape->recalcLocalAabb();
+            hullShape->setMargin(static_cast<btScalar>(0.01));
+            const Quat rot = quatIdentity();
+            m_physicsWorld->addStaticCollider(
+                std::move(hullShape),
+                pos,
+                rot,
+                SurfaceType::DryAsphalt,
+                false
+            );
+
+            // Add renderable mesh to track renderer
+            TrackRendererGL::RenderableTrackItem item;
+            item.mesh = Mesh::createLowPolyRock(
+                static_cast<float>(radius),
+                static_cast<float>(radius * 0.75),
+                static_cast<float>(radius),
+                42
+            );
+            item.modelMatrix = Mat4::fromTRS(pos, rot);
+            item.material.textureId = 0;
+            item.material.doubleSided = true;
+            item.material.roughness = 0.88f;
+            item.material.metalness = 0.04f;
+            item.material.baseColor = Color3{0.68f, 0.42f, 0.28f};
+            item.material.castShadows = true;
+            item.material.receiveShadows = true;
+            m_trackRenderer.addRenderableItem(std::move(item));
+
+            if (m_hasDestination && m_pathFollower.isNavigating()) {
+                const Vec3 roverPos = m_physicsWorld->vehicle->body.getPosition();
+                PlanResult repRes = m_planner.plan(m_navGrid, roverPos, m_selectedDestination);
+                if (repRes.success) {
+                    m_pathFollower.setPath(repRes.waypoints);
+                }
+            }
+        },
+        [this]() {
+            if (auto activeMap = m_terrainManager.getActiveMap()) {
+                m_navGrid.clearObstacles();
+                m_navGrid.buildFromTerrain(*activeMap);
+                m_terrainManager.switchMap(activeMap->getId(), *m_physicsWorld, &m_trackRenderer, &m_skyRenderer);
+                if (m_hasDestination && m_pathFollower.isNavigating()) {
+                    const Vec3 roverPos = m_physicsWorld->vehicle->body.getPosition();
+                    PlanResult repRes = m_planner.plan(m_navGrid, roverPos, m_selectedDestination);
+                    if (repRes.success) {
+                        m_pathFollower.setPath(repRes.waypoints);
+                    }
+                }
             }
         }
     });

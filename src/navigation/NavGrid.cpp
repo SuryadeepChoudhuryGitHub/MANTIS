@@ -140,16 +140,20 @@ bool NavGrid::buildFromTerrain(const ITerrainMap& terrainMap) {
             m_obstacles.push_back(NavObstacleInfo{rock.position, rRadius, true});
 
             int minGx = 0, minGz = 0, maxGx = 0, maxGz = 0;
-            worldToGrid(rock.position.x - rRadius, rock.position.z - rRadius, minGx, minGz);
-            worldToGrid(rock.position.x + rRadius, rock.position.z + rRadius, maxGx, maxGz);
+            worldToGrid(rock.position.x - rRadius - m_config.cellSizeM, rock.position.z - rRadius - m_config.cellSizeM, minGx, minGz);
+            worldToGrid(rock.position.x + rRadius + m_config.cellSizeM, rock.position.z + rRadius + m_config.cellSizeM, maxGx, maxGz);
 
+            const double halfCell = 0.5 * m_config.cellSizeM;
             for (int rz = minGz; rz <= maxGz; ++rz) {
                 for (int rx = minGx; rx <= maxGx; ++rx) {
                     NavNode* rNode = const_cast<NavNode*>(getNode(rx, rz));
                     if (!rNode) continue;
-                    const double d2 = (rNode->worldPosition.x - rock.position.x) * (rNode->worldPosition.x - rock.position.x) +
-                                      (rNode->worldPosition.z - rock.position.z) * (rNode->worldPosition.z - rock.position.z);
-                    if (d2 <= rRadius * rRadius) {
+                    // Circle-to-AABB distance check to guarantee every rock of any size intersects and blocks cells
+                    const double clampX = clamp(rock.position.x, rNode->worldPosition.x - halfCell, rNode->worldPosition.x + halfCell);
+                    const double clampZ = clamp(rock.position.z, rNode->worldPosition.z - halfCell, rNode->worldPosition.z + halfCell);
+                    const double dx = rock.position.x - clampX;
+                    const double dz = rock.position.z - clampZ;
+                    if (dx * dx + dz * dz <= rRadius * rRadius) {
                         rNode->traversability = CellTraversability::NonTraversable_ObstacleCollision;
                         rNode->costMultiplier = 1e6;
                     }
@@ -248,16 +252,19 @@ void NavGrid::computeObstacleDistanceTransform() {
 void NavGrid::addObstacle(const Vec3& pos, double radius, bool isRock) {
     m_obstacles.push_back(NavObstacleInfo{pos, radius, isRock});
     int minGx = 0, minGz = 0, maxGx = 0, maxGz = 0;
-    worldToGrid(pos.x - radius, pos.z - radius, minGx, minGz);
-    worldToGrid(pos.x + radius, pos.z + radius, maxGx, maxGz);
+    worldToGrid(pos.x - radius - m_config.cellSizeM, pos.z - radius - m_config.cellSizeM, minGx, minGz);
+    worldToGrid(pos.x + radius + m_config.cellSizeM, pos.z + radius + m_config.cellSizeM, maxGx, maxGz);
 
+    const double halfCell = 0.5 * m_config.cellSizeM;
     for (int rz = minGz; rz <= maxGz; ++rz) {
         for (int rx = minGx; rx <= maxGx; ++rx) {
             NavNode* rNode = const_cast<NavNode*>(getNode(rx, rz));
             if (!rNode) continue;
-            const double d2 = (rNode->worldPosition.x - pos.x) * (rNode->worldPosition.x - pos.x) +
-                              (rNode->worldPosition.z - pos.z) * (rNode->worldPosition.z - pos.z);
-            if (d2 <= radius * radius) {
+            const double clampX = clamp(pos.x, rNode->worldPosition.x - halfCell, rNode->worldPosition.x + halfCell);
+            const double clampZ = clamp(pos.z, rNode->worldPosition.z - halfCell, rNode->worldPosition.z + halfCell);
+            const double dx = pos.x - clampX;
+            const double dz = pos.z - clampZ;
+            if (dx * dx + dz * dz <= radius * radius) {
                 rNode->traversability = CellTraversability::NonTraversable_ObstacleCollision;
                 rNode->costMultiplier = 1e6;
             }
